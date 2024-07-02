@@ -6,9 +6,14 @@ from tabulate import tabulate
 
 """
 Triggers for different sections of code. Set variable to True for
-    spline_fit:     (Cubic) spline fit through data and Vbar (reconstructed).
+    spline_fit:     (Quartic) spline fit through data and Vbar (reconstructed).
     plot_splines:   Produce plots of spline fits.
-    plot_d1:        Plot first derivative of spline fits.
+    plot_d1:        Plot first derivative of the splines of ONLY Vobs and Vbar.
+    plot_d1_ALL:    Plot first derivative of ALL splines.
+    plot_d2:        Plot second derivative of the splines of ONLY Vobs and Vbar.
+    plot_d2_ALL:    Plot second derivative of ALL splines.
+    testing:        Run the for-loop through only the first few galaxies and
+                    stop printing correlation statistics and table (as txt files).
 """
 finite_diff = True
 spline_fit = True
@@ -41,11 +46,13 @@ def Vbar(arr):
     return v
 
 galaxy_count = len(table["Galaxy"])
+skips = 0
 if testing:
-    galaxy_count = 3
+    galaxy_count = 5
 bulged_count = 0
 xbulge_count = 0
 
+galaxy = []
 fd_corr = []
 spline_corr = []
 bulged_corr = []
@@ -57,6 +64,10 @@ xbulge_corr2 = []
 for i in range(galaxy_count):
     g = table["Galaxy"][i]
     
+    if g=="D512-2" or g=="D564-8" or g=="D631-7" or g=="NGC4138" or g=="NGC5907" or g=="UGC06818":
+        skips += 1
+        continue
+    
     """
     Plotting galaxy rotation curves directly from data with variables:
     Vobs (overall observed, corrected for inclination), Vgas, Vdisk, Vbul.
@@ -65,7 +76,20 @@ for i in range(galaxy_count):
     rawdata = np.loadtxt(file_path)
     data = pd.DataFrame(rawdata, columns=columns)
     bulged = np.any(data["Vbul"]>0) # Check whether galaxy has bulge.
-    r = data["Rad"]
+    r = data["Rad"] / table["Rdisk"][i] # Normalised radius (Rdisk = scale length of stellar disk).
+    
+    # Reject galaxies with less than 5 data points (quartic splines do not work).
+    if len(r) < 5:
+        skips += 1
+        continue
+    
+    # Normalise velocities by Vmax = max(Vobs).
+    Vmax = max(data["Vobs"])
+    nVobs = data["Vobs"] / Vmax
+    nVbar = Vbar(data) / Vmax
+    nVgas = data["Vgas"] / Vmax
+    nVdisk = data["Vdisk"] / Vmax
+    nVbul = data["Vbul"] / Vmax
     
     if bulged:
         bulged_count += 1
@@ -76,21 +100,21 @@ for i in range(galaxy_count):
     Compute finite differences directly from discrete data points.
     """
     if finite_diff:
-        dVobs_dr = np.diff(data["Vobs"]) / np.diff(r)
-        dVbar_dr = np.diff(Vbar(data)) / np.diff(r)
+        dVobs_dr = np.diff(nVobs) / np.diff(r)
+        dVbar_dr = np.diff(nVbar) / np.diff(r)
         corr = np.corrcoef(dVobs_dr, dVbar_dr)[0,1]
         fd_corr.append(corr)
     
     """
-    Fit (cubic) splines through data and Vbar (reconstructed).
+    Fit (quartic) splines through data and Vbar (reconstructed).
     """
     if spline_fit:
-        Vobs = interpolate.UnivariateSpline(r, data["Vobs"])
-        Vbar_fit = interpolate.UnivariateSpline(r, Vbar(data))
-        Vgas = interpolate.UnivariateSpline(r, data["Vgas"])
-        Vdisk = interpolate.UnivariateSpline(r, data["Vdisk"])
+        Vobs = interpolate.UnivariateSpline(r, nVobs, k=4)
+        Vbar_fit = interpolate.UnivariateSpline(r, nVbar, k=4)
+        Vgas = interpolate.UnivariateSpline(r, nVgas, k=4)
+        Vdisk = interpolate.UnivariateSpline(r, nVdisk, k=4)
         if bulged:
-            Vbul = interpolate.UnivariateSpline(r, data["Vbul"])
+            Vbul = interpolate.UnivariateSpline(r, nVbul, k=4)
         
         # First derivative of splines (change 1 to n for nth derivative).
         dVbar = Vbar_fit.derivative(1)
@@ -140,13 +164,13 @@ for i in range(galaxy_count):
     """
     if plot_splines:
         plt.title(g)
-        plt.xlabel('Radius (kpc)')
-        plt.ylabel('Velocities (km/s)')
+        plt.xlabel(r'Normalised radius ($\times$Reff)')
+        plt.ylabel('Normalised velocities')
         
-        plt.errorbar(r, data["Vobs"], yerr=data["errV"], color='k', fmt="o", capsize=3, alpha=0.3)
-        plt.scatter(r, Vbar(data), color='red', alpha=0.3)
-        plt.scatter(r, data["Vgas"], color="green", alpha=0.3)
-        plt.scatter(r, data["Vdisk"]*np.sqrt(pdisk), color="blue", alpha=0.3)
+        plt.errorbar(r, nVobs, yerr=data["errV"]/Vmax, color='k', fmt="o", capsize=3, alpha=0.3)
+        plt.scatter(r, nVbar, color='red', alpha=0.3)
+        plt.scatter(r, nVgas, color="green", alpha=0.3)
+        plt.scatter(r, nVdisk*np.sqrt(pdisk), color="blue", alpha=0.3)
         
         plt.plot(rad, Vobs(rad), color='k', label="Vobs")
         plt.plot(rad, Vbar_fit(rad), color='red', label="Vbar")
@@ -154,7 +178,7 @@ for i in range(galaxy_count):
         plt.plot(rad, Vdisk(rad)*np.sqrt(pdisk), color="blue", label="Vdisk")
         
         if bulged:
-            plt.scatter(r, data["Vbul"]*np.sqrt(pbul), color="darkorange", alpha=0.3)
+            plt.scatter(r, nVbul*np.sqrt(pbul), color="darkorange", alpha=0.3)
             plt.plot(rad, Vbul(rad)*np.sqrt(pbul), color="darkorange", label="Vbul")
         
         plt.legend(bbox_to_anchor=(1,1), loc="upper left")
@@ -171,8 +195,8 @@ for i in range(galaxy_count):
         ax1.set_title("First derivative: "+g)
         
         color = "tab:red"
-        ax1.set_xlabel("Radius (kpc)")
-        ax1.set_ylabel("Velocities (km/s)", color=color)
+        ax1.set_xlabel(r"Normalised radius ($\times$Reff)")
+        ax1.set_ylabel("Normalised velocities", color=color)
     
         ln1 = ax1.plot(rad, dVbar(rad), color=color, label="Baryonic curve - Vbar")
         ax1.tick_params(axis='y', labelcolor=color)
@@ -267,40 +291,45 @@ for i in range(galaxy_count):
             plt.savefig("C:/Users/admin/OneDrive/Desktop/Other/Oxford UROP 2024/plots/Vbar_Vobs/d2_ALL/"+g+".png", dpi=300, bbox_inches="tight")
             plt.show()
             plt.close()
+     
+    # Make a list of the used galaxies.
+    galaxy.append(g)
 
-# Write all correlations into a table and save to txt file (correlations.txt, same directory as the plots)
-corr_arrays = np.array([table["Galaxy"], fd_corr, spline_corr, bulged_corr, xbulge_corr, d2_corr, bulged_corr2, xbulge_corr2])
-corr_arrays = np.transpose(corr_arrays)
-corr_arrays = corr_arrays.reshape(galaxy_count,8)
-header = [ "Galaxy", "Finite difference", "Spline: 1st derivative",
-            "w/ bulge","w/o bulge", "Spline: 2nd derivative", "w/ bulge", "w/o bulge" ]
-corr_table = pd.DataFrame(corr_arrays, columns=header)
-
-corr_table.to_csv('C:/Users/admin/OneDrive/Desktop/Other/Oxford UROP 2024/plots/Vbar_Vobs/correlations.txt', sep='\t', index=False)
-with open('C:/Users/admin/OneDrive/Desktop/Other/Oxford UROP 2024/plots/Vbar_Vobs/corr_table.txt', 'w') as f:
-    f.write(tabulate(corr_table, headers=header))
-
-# Some useful info regarding percentages of positive correlations.
-print("Using finite difference:")
-corr_pos = [c for c in fd_corr if c > 0]
-pos_rate = len(corr_pos) / galaxy_count
-print("Total number of galaxies =", galaxy_count)
-print("Number of positive correlations =", len(corr_pos), ", i.e.", round(pos_rate*100, 1), "% of all galaxies.")
-
-print()
-print("Using (cubic) spline fits:")
-corr_pos = [c for c in spline_corr if c > 0]
-pos_rate = len(corr_pos) / galaxy_count
-print("No. of positive 1st derivative correlations =", len(corr_pos), ", i.e.", round(pos_rate*100, 1), "% of all galaxies.")
-bulged_pos = [c for c in bulged_corr if c > 0]
-xbulge_pos = [c for c in xbulge_corr if c > 0]
-print("Out of these, there are {} galaxies with bulge ({}%) and {} without ({}%)."
-      .format(len(bulged_pos), round(len(bulged_pos)/bulged_count*100, 1), len(xbulge_pos), round(len(xbulge_pos)/xbulge_count*100, 1)))
-
-corr2_pos = [c for c in d2_corr if c > 0]
-pos_rate = len(corr2_pos) / galaxy_count
-print("No. of positive 2nd derivative correlations =", len(corr2_pos), ", i.e.", round(pos_rate*100, 1), "% of all galaxies.")
-bulged_pos = [c for c in bulged_corr2 if c > 0]
-xbulge_pos = [c for c in xbulge_corr2 if c > 0]
-print("Out of these, there are {} galaxies with bulge ({}%) and {} without ({}%)."
-      .format(len(bulged_pos), round(len(bulged_pos)/bulged_count*100, 1), len(xbulge_pos), round(len(xbulge_pos)/xbulge_count*100, 1)))
+if not testing:
+    # Write all correlations into a table and save to txt file (correlations.txt, same directory as the plots)
+    corr_arrays = np.array([galaxy, fd_corr, spline_corr, bulged_corr, xbulge_corr, d2_corr, bulged_corr2, xbulge_corr2])
+    corr_arrays = np.transpose(corr_arrays)
+    corr_arrays = corr_arrays.reshape(galaxy_count,8)
+    header = [ "Galaxy", "Finite difference", "Spline: 1st derivative",
+                "w/ bulge","w/o bulge", "Spline: 2nd derivative", "w/ bulge", "w/o bulge" ]
+    corr_table = pd.DataFrame(corr_arrays, columns=header)
+    
+    corr_table.to_csv('C:/Users/admin/OneDrive/Desktop/Other/Oxford UROP 2024/plots/Vbar_Vobs/correlations.txt', sep='\t', index=False)
+    with open('C:/Users/admin/OneDrive/Desktop/Other/Oxford UROP 2024/plots/Vbar_Vobs/corr_table.txt', 'w') as f:
+        f.write(tabulate(corr_table, headers=header))
+    
+    # Some useful info regarding percentages of positive correlations.
+    galaxy_count = len(galaxy)
+    print("Using finite difference:")
+    corr_pos = [c for c in fd_corr if c > 0]
+    pos_rate = len(corr_pos) / galaxy_count
+    print("Total number of galaxies =", galaxy_count)
+    print("Number of positive correlations =", len(corr_pos), ", i.e.", round(pos_rate*100, 1), "% of all galaxies.")
+    
+    print()
+    print("Using (cubic) spline fits:")
+    corr_pos = [c for c in spline_corr if c > 0]
+    pos_rate = len(corr_pos) / galaxy_count
+    print("No. of positive 1st derivative correlations =", len(corr_pos), ", i.e.", round(pos_rate*100, 1), "% of all galaxies.")
+    bulged_pos = [c for c in bulged_corr if c > 0]
+    xbulge_pos = [c for c in xbulge_corr if c > 0]
+    print("Out of these, there are {} galaxies with bulge ({}%) and {} without ({}%)."
+          .format(len(bulged_pos), round(len(bulged_pos)/bulged_count*100, 1), len(xbulge_pos), round(len(xbulge_pos)/xbulge_count*100, 1)))
+    
+    corr2_pos = [c for c in d2_corr if c > 0]
+    pos_rate = len(corr2_pos) / galaxy_count
+    print("No. of positive 2nd derivative correlations =", len(corr2_pos), ", i.e.", round(pos_rate*100, 1), "% of all galaxies.")
+    bulged_pos = [c for c in bulged_corr2 if c > 0]
+    xbulge_pos = [c for c in xbulge_corr2 if c > 0]
+    print("Out of these, there are {} galaxies with bulge ({}%) and {} without ({}%)."
+          .format(len(bulged_pos), round(len(bulged_pos)/bulged_count*100, 1), len(xbulge_pos), round(len(xbulge_pos)/xbulge_count*100, 1)))
