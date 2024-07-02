@@ -2,6 +2,7 @@ import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 from scipy import interpolate
+import scipy.stats
 from tabulate import tabulate
 
 """
@@ -102,7 +103,7 @@ for i in range(galaxy_count):
     if finite_diff:
         dVobs_dr = np.diff(nVobs) / np.diff(r)
         dVbar_dr = np.diff(nVbar) / np.diff(r)
-        corr = np.corrcoef(dVobs_dr, dVbar_dr)[0,1]
+        corr = scipy.stats.spearmanr(dVobs_dr, dVbar_dr)[0]
         fd_corr.append(corr)
     
     """
@@ -129,7 +130,7 @@ for i in range(galaxy_count):
         rad = np.linspace(0., r[len(r)-1], num=10000)
         dVobs_dr = dVobs(rad)
         dVbar_dr = dVbar(rad)
-        corr = np.corrcoef(dVobs_dr, dVbar_dr)[0,1]
+        corr = scipy.stats.spearmanr(dVobs_dr, dVbar_dr)[0] # Spearman's rho
         spline_corr.append(corr)
         if bulged:
             bulged_corr.append(corr)
@@ -149,7 +150,7 @@ for i in range(galaxy_count):
         # Compute correlation by taking finite differences between nearby points.
         d2Vobs_dr2 = d2Vobs(rad)
         d2Vbar_dr2 = d2Vbar(rad)
-        corr = np.corrcoef(d2Vobs_dr2, d2Vbar_dr2)[0,1]
+        corr = scipy.stats.spearmanr(d2Vobs_dr2, d2Vbar_dr2)[0]
         d2_corr.append(corr)
         if bulged:
             bulged_corr2.append(corr)
