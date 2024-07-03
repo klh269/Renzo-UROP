@@ -49,7 +49,7 @@ def Vbar(arr):
 galaxy_count = len(table["Galaxy"])
 skips = 0
 if testing:
-    galaxy_count = 5
+    galaxy_count = 1
 bulged_count = 0
 xbulge_count = 0
 
@@ -110,12 +110,12 @@ for i in range(galaxy_count):
     Fit (quartic) splines through data and Vbar (reconstructed).
     """
     if spline_fit:
-        Vobs = interpolate.UnivariateSpline(r, nVobs, k=4)
-        Vbar_fit = interpolate.UnivariateSpline(r, nVbar, k=4)
-        Vgas = interpolate.UnivariateSpline(r, nVgas, k=4)
-        Vdisk = interpolate.UnivariateSpline(r, nVdisk, k=4)
+        Vobs = interpolate.UnivariateSpline(r, nVobs, k=4, s=0)
+        Vbar_fit = interpolate.UnivariateSpline(r, nVbar, k=4, s=0)
+        Vgas = interpolate.UnivariateSpline(r, nVgas, k=4, s=0)
+        Vdisk = interpolate.UnivariateSpline(r, nVdisk, k=4, s=0)
         if bulged:
-            Vbul = interpolate.UnivariateSpline(r, nVbul, k=4)
+            Vbul = interpolate.UnivariateSpline(r, nVbul, k=4, s=0)
         
         # First derivative of splines (change 1 to n for nth derivative).
         dVbar = Vbar_fit.derivative(1)
@@ -165,7 +165,7 @@ for i in range(galaxy_count):
     """
     if plot_splines:
         plt.title(g)
-        plt.xlabel(r'Normalised radius ($\times$Reff)')
+        plt.xlabel(r'Normalised radius ($\times R_{eff}$)')
         plt.ylabel('Normalised velocities')
         
         plt.errorbar(r, nVobs, yerr=data["errV"]/Vmax, color='k', fmt="o", capsize=3, alpha=0.3)
@@ -196,15 +196,15 @@ for i in range(galaxy_count):
         ax1.set_title("First derivative: "+g)
         
         color = "tab:red"
-        ax1.set_xlabel(r"Normalised radius ($\times$Reff)")
-        ax1.set_ylabel("Normalised velocities", color=color)
+        ax1.set_xlabel(r"Normalised radius ($\times R_{eff}$)")
+        ax1.set_ylabel(r'$dv_{bar}/dr$', color=color)
     
         ln1 = ax1.plot(rad, dVbar(rad), color=color, label="Baryonic curve - Vbar")
         ax1.tick_params(axis='y', labelcolor=color)
         
         ax2 = ax1.twinx()
         color = "black"
-        ax2.set_ylabel("Velocities (km/s)", color=color)
+        ax2.set_ylabel(r'$dv_{obs}/dr$', color=color)
         ln2 = ax2.plot(rad, dVobs(rad), color=color, label="Total curve - Vobs")
         ax2.tick_params(axis='y', labelcolor=color)
         
@@ -224,8 +224,8 @@ for i in range(galaxy_count):
     """
     if plot_d1_ALL:
         plt.title("First derivative: "+g)
-        plt.xlabel('Radius (kpc)')
-        plt.ylabel('Velocities (km/s)')
+        plt.xlabel(r'Normalised radius ($\times R_{eff}$)')
+        plt.ylabel(r'$dv/dr$')
         
         plt.plot(rad, dVobs(rad), color='k', label="Vobs")
         plt.plot(rad, dVbar(rad), color='red', label="Vbar")
@@ -249,15 +249,15 @@ for i in range(galaxy_count):
         ax1.set_title("Second derivative: "+g)
         
         color = "tab:red"
-        ax1.set_xlabel("Radius (kpc)")
-        ax1.set_ylabel("Velocities (km/s)", color=color)
+        ax1.set_xlabel(r'Normalised radius ($\times R_{eff}$)')
+        ax1.set_ylabel(r'$d^2v_{bar}/dr^2$', color=color)
     
         ln1 = ax1.plot(rad, d2Vbar(rad), color=color, label="Baryonic curve - Vbar")
         ax1.tick_params(axis='y', labelcolor=color)
         
         ax2 = ax1.twinx()
         color = "black"
-        ax2.set_ylabel("Velocities (km/s)", color=color)
+        ax2.set_ylabel(r'$d^2v_{obs}/dr^2$', color=color)
         ln2 = ax2.plot(rad, d2Vobs(rad), color=color, label="Total curve - Vobs")
         ax2.tick_params(axis='y', labelcolor=color)
         
@@ -277,8 +277,8 @@ for i in range(galaxy_count):
         """
         if plot_d2_ALL:
             plt.title("Second derivative: "+g)
-            plt.xlabel('Radius (kpc)')
-            plt.ylabel('Velocities (km/s)')
+            plt.xlabel(r'Normalised radius ($\times R_{eff}$)')
+            plt.ylabel(r'$d^2v/dr^2$')
             
             plt.plot(rad, d2Vobs(rad), color='k', label="Vobs")
             plt.plot(rad, d2Vbar(rad), color='red', label="Vbar")
@@ -296,6 +296,8 @@ for i in range(galaxy_count):
     # Make a list of the used galaxies.
     galaxy.append(g)
 
+galaxy_count = len(galaxy)
+
 if not testing:
     # Write all correlations into a table and save to txt file (correlations.txt, same directory as the plots)
     corr_arrays = np.array([galaxy, fd_corr, spline_corr, bulged_corr, xbulge_corr, d2_corr, bulged_corr2, xbulge_corr2])
@@ -310,7 +312,6 @@ if not testing:
         f.write(tabulate(corr_table, headers=header))
     
     # Some useful info regarding percentages of positive correlations.
-    galaxy_count = len(galaxy)
     print("Using finite difference:")
     corr_pos = [c for c in fd_corr if c > 0]
     pos_rate = len(corr_pos) / galaxy_count
