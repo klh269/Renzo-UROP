@@ -4,25 +4,25 @@ import matplotlib.pyplot as plt
 from scipy import interpolate
 import scipy.stats
 from tabulate import tabulate
+from tqdm import tqdm
 
 """
 Triggers for different sections of code. Set variable to True for
     spline_fit:     (Quartic) spline fit through data and Vbar (reconstructed).
-    plot_splines:   Produce plots of spline fits.
-    plot_d1:        Plot first derivative of the splines of ONLY Vobs and Vbar.
-    plot_d1_ALL:    Plot first derivative of ALL splines.
-    plot_d2:        Plot second derivative of the splines of ONLY Vobs and Vbar.
-    plot_d2_ALL:    Plot second derivative of ALL splines.
+    plot_splines:   Produce plots of spline fits, including:
+                        Raw spline fits on scatter data;
+                        First derivative of the splines of ONLY Vobs and Vbar;
+                        First derivative of ALL splines;
+                        Second derivative of the splines of ONLY Vobs and Vbar;
+                        Second derivative of ALL splines.
     testing:        Run the for-loop through only the first few galaxies and
                     stop printing correlation statistics and table (as txt files).
 """
 finite_diff = True
 spline_fit = True
-plot_splines = True
-plot_d1 = True
-plot_d1_ALL = True
-plot_d2 = True
-plot_d2_ALL = True
+plot_splines = False
+f_corr = True
+plot_corr = True
 testing = False
 
 file = "C:/Users/admin/OneDrive/Desktop/Other/Oxford UROP 2024/SPARC_Lelli2016c.mrt.txt"
@@ -62,7 +62,7 @@ d2_corr = []
 bulged_corr2 = []
 xbulge_corr2 = []
 
-for i in range(galaxy_count):
+for i in tqdm(range(galaxy_count)):
     g = table["Galaxy"][i]
     
     if g=="D512-2" or g=="D564-8" or g=="D631-7" or g=="NGC4138" or g=="NGC5907" or g=="UGC06818":
@@ -87,6 +87,7 @@ for i in range(galaxy_count):
     # Normalise velocities by Vmax = max(Vobs).
     Vmax = max(data["Vobs"])
     nVobs = data["Vobs"] / Vmax
+    nerrV = data["errV"] / Vmax
     nVbar = Vbar(data) / Vmax
     nVgas = data["Vgas"] / Vmax
     nVdisk = data["Vdisk"] / Vmax
@@ -110,7 +111,7 @@ for i in range(galaxy_count):
     Fit (quartic) splines through data and Vbar (reconstructed).
     """
     if spline_fit:
-        Vobs = interpolate.UnivariateSpline(r, nVobs, k=4, s=0)
+        Vobs = interpolate.UnivariateSpline(r, nVobs, w=1/(nerrV**2), k=4, s=0)
         Vbar_fit = interpolate.UnivariateSpline(r, nVbar, k=4, s=0)
         Vgas = interpolate.UnivariateSpline(r, nVgas, k=4, s=0)
         Vdisk = interpolate.UnivariateSpline(r, nVdisk, k=4, s=0)
@@ -127,7 +128,7 @@ for i in range(galaxy_count):
         
         # Compute correlation of Vbar vs Vobs by taking
         # finite differences between nearby points.
-        rad = np.linspace(0., r[len(r)-1], num=10000)
+        rad = np.linspace(r[0], r[len(r)-1], num=10000)
         dVobs_dr = dVobs(rad)
         dVbar_dr = dVbar(rad)
         corr = scipy.stats.spearmanr(dVobs_dr, dVbar_dr)[0] # Spearman's rho
@@ -187,11 +188,7 @@ for i in range(galaxy_count):
         plt.show()
         plt.close()
     
-    """
-    Plot first derivatives of the splines for Vobs and Vbar;
-    Trigger by setting plot_d1 = True in top of code.
-    """
-    if plot_d1:
+        # Plot first derivatives of the splines for Vobs and Vbar.
         fig1, ax1 = plt.subplots()
         ax1.set_title("First derivative: "+g)
         
@@ -218,11 +215,7 @@ for i in range(galaxy_count):
         fig1.savefig("C:/Users/admin/OneDrive/Desktop/Other/Oxford UROP 2024/plots/Vbar_Vobs/d1/"+g+".png", dpi=300, bbox_inches="tight")
         plt.close()
     
-    """
-    Plot first derivatives of ALL the splines;
-    Trigger by setting plot_d1_ALL = True in top of code.
-    """
-    if plot_d1_ALL:
+        # Plot first derivatives of ALL the splines.
         plt.title("First derivative: "+g)
         plt.xlabel(r'Normalised radius ($\times R_{eff}$)')
         plt.ylabel(r'$dv/dr$')
@@ -240,11 +233,7 @@ for i in range(galaxy_count):
         plt.show()
         plt.close()
         
-    """
-    Plot first derivatives of the splines;
-    Trigger by setting plot_d1 = True in top of code.
-    """
-    if plot_d2:
+        # Plot first derivatives of the splines.
         fig2, ax1 = plt.subplots()
         ax1.set_title("Second derivative: "+g)
         
@@ -271,67 +260,99 @@ for i in range(galaxy_count):
         fig2.savefig("C:/Users/admin/OneDrive/Desktop/Other/Oxford UROP 2024/plots/Vbar_Vobs/d2/"+g+".png", dpi=300, bbox_inches="tight")
         plt.close()
         
-        """
-        Plot first derivatives of ALL the splines;
-        Trigger by setting plot_d1_ALL = True in top of code.
-        """
-        if plot_d2_ALL:
-            plt.title("Second derivative: "+g)
-            plt.xlabel(r'Normalised radius ($\times R_{eff}$)')
-            plt.ylabel(r'$d^2v/dr^2$')
-            
-            plt.plot(rad, d2Vobs(rad), color='k', label="Vobs")
-            plt.plot(rad, d2Vbar(rad), color='red', label="Vbar")
-            plt.plot(rad, d2Vgas(rad), color="green", label="Vgas")
-            plt.plot(rad, d2Vdisk(rad)*np.sqrt(pdisk), color="blue", label="Vdisk")
-            
-            if bulged:
-                plt.plot(rad, d2Vbul(rad)*np.sqrt(pbul), color="darkorange", label="Vbul")
-            
-            plt.legend(bbox_to_anchor=(1,1), loc="upper left")
-            plt.savefig("C:/Users/admin/OneDrive/Desktop/Other/Oxford UROP 2024/plots/Vbar_Vobs/d2_ALL/"+g+".png", dpi=300, bbox_inches="tight")
-            plt.show()
-            plt.close()
-     
+        # Plot first derivatives of ALL the splines.
+        plt.title("Second derivative: "+g)
+        plt.xlabel(r'Normalised radius ($\times R_{eff}$)')
+        plt.ylabel(r'$d^2v/dr^2$')
+        
+        plt.plot(rad, d2Vobs(rad), color='k', label="Vobs")
+        plt.plot(rad, d2Vbar(rad), color='red', label="Vbar")
+        plt.plot(rad, d2Vgas(rad), color="green", label="Vgas")
+        plt.plot(rad, d2Vdisk(rad)*np.sqrt(pdisk), color="blue", label="Vdisk")
+        
+        if bulged:
+            plt.plot(rad, d2Vbul(rad)*np.sqrt(pbul), color="darkorange", label="Vbul")
+        
+        plt.legend(bbox_to_anchor=(1,1), loc="upper left")
+        plt.savefig("C:/Users/admin/OneDrive/Desktop/Other/Oxford UROP 2024/plots/Vbar_Vobs/d2_ALL/"+g+".png", dpi=300, bbox_inches="tight")
+        plt.show()
+        plt.close()
+    
+    if f_corr:
+        # Make a copy of Vobs and Vbar as functions of Vbar/Vobs.
+        fV = Vbar_fit(rad) / Vobs(rad)
+        index = fV.argsort()[::-1]
+        fV = fV[index]
+        d2Vobs_v = d2Vobs_dr2[index]
+        d2Vbar_v = d2Vbar_dr2[index]
+        
+        # Correlation as a function of (maximum) radius, i.e. spheres of increasing r.
+        fR_corr = []
+        fV_corr = []
+        for i in range(len(rad)):
+            fR_corr.append(scipy.stats.spearmanr(d2Vobs_dr2[:i], d2Vbar_dr2[:i])[0])
+            fV_corr.append(scipy.stats.spearmanr(d2Vobs_v[:i], d2Vbar_v[:i])[0])
+        
+    if plot_corr:
+        plt.title("Correlation of 2nd derivatives (Vobs & Vbar w.r.t. r) \n as a function of maximum radius: " + g)
+        plt.xlabel(r'Normalised maximum radius ($\times R_{eff}$)')
+        plt.ylabel("Spearman correlation")
+        plt.plot(rad, fR_corr)
+        
+        plt.savefig("C:/Users/admin/OneDrive/Desktop/Other/Oxford UROP 2024/plots/Vbar_Vobs/corr_R/"+g+".png", dpi=300, bbox_inches="tight")
+        plt.show()
+        plt.close()
+        
+        plt.title("Correlation of 2nd derivatives (Vobs & Vbar w.r.t. r) \n as a function of maximum " + r"$v_{bar}/v_{obs}$: " + g)
+        plt.xlabel(r'$v_{bar}/v_{obs}$')
+        plt.ylabel("Spearman correlation")
+        plt.plot(fV, fV_corr)
+        gap = (max(fV)-min(fV)) / 20
+        plt.xlim(max(fV)+gap, min(fV)-gap)
+        
+        plt.savefig("C:/Users/admin/OneDrive/Desktop/Other/Oxford UROP 2024/plots/Vbar_Vobs/corr_V/"+g+".png", dpi=300, bbox_inches="tight")
+        plt.show()
+        plt.close()
+    
     # Make a list of the used galaxies.
     galaxy.append(g)
 
 galaxy_count = len(galaxy)
 
-if not testing:
-    # Write all correlations into a table and save to txt file (correlations.txt, same directory as the plots)
-    corr_arrays = np.array([galaxy, fd_corr, spline_corr, bulged_corr, xbulge_corr, d2_corr, bulged_corr2, xbulge_corr2])
-    corr_arrays = np.transpose(corr_arrays)
-    corr_arrays = corr_arrays.reshape(galaxy_count,8)
-    header = [ "Galaxy", "Finite difference", "Spline: 1st derivative",
-                "w/ bulge","w/o bulge", "Spline: 2nd derivative", "w/ bulge", "w/o bulge" ]
-    corr_table = pd.DataFrame(corr_arrays, columns=header)
+# if not testing:
+#     # Write all correlations into a table and save to txt file (correlations.txt, same directory as the plots)
+#     corr_arrays = np.array([galaxy, fd_corr, spline_corr, bulged_corr, xbulge_corr, d2_corr, bulged_corr2, xbulge_corr2])
+#     corr_arrays = np.transpose(corr_arrays)
+#     corr_arrays = corr_arrays.reshape(galaxy_count,8)
+#     header = [ "Galaxy", "Finite difference", "Spline: 1st derivative",
+#                 "w/ bulge","w/o bulge", "Spline: 2nd derivative", "w/ bulge", "w/o bulge" ]
+#     corr_table = pd.DataFrame(corr_arrays, columns=header)
     
-    corr_table.to_csv('C:/Users/admin/OneDrive/Desktop/Other/Oxford UROP 2024/plots/Vbar_Vobs/correlations.txt', sep='\t', index=False)
-    with open('C:/Users/admin/OneDrive/Desktop/Other/Oxford UROP 2024/plots/Vbar_Vobs/corr_table.txt', 'w') as f:
-        f.write(tabulate(corr_table, headers=header))
+#     corr_table.to_csv('C:/Users/admin/OneDrive/Desktop/Other/Oxford UROP 2024/plots/Vbar_Vobs/correlations.txt', sep='\t', index=False)
+#     with open('C:/Users/admin/OneDrive/Desktop/Other/Oxford UROP 2024/plots/Vbar_Vobs/corr_table.txt', 'w') as f:
+#         f.write(tabulate(corr_table, headers=header))
     
-    # Some useful info regarding percentages of positive correlations.
-    print("Using finite difference:")
-    corr_pos = [c for c in fd_corr if c > 0]
-    pos_rate = len(corr_pos) / galaxy_count
-    print("Total number of galaxies =", galaxy_count)
-    print("Number of positive correlations =", len(corr_pos), ", i.e.", round(pos_rate*100, 1), "% of all galaxies.")
+#     # Some useful info regarding percentages of positive correlations.
+#     print("Using finite difference:")
+#     corr_pos = [c for c in fd_corr if c > 0]
+#     pos_rate = len(corr_pos) / galaxy_count
+#     print("Total number of galaxies =", galaxy_count)
+#     print("Number of positive correlations =", len(corr_pos), ", i.e.", round(pos_rate*100, 1), "% of all galaxies.")
     
-    print()
-    print("Using (cubic) spline fits:")
-    corr_pos = [c for c in spline_corr if c > 0]
-    pos_rate = len(corr_pos) / galaxy_count
-    print("No. of positive 1st derivative correlations =", len(corr_pos), ", i.e.", round(pos_rate*100, 1), "% of all galaxies.")
-    bulged_pos = [c for c in bulged_corr if c > 0]
-    xbulge_pos = [c for c in xbulge_corr if c > 0]
-    print("Out of these, there are {} galaxies with bulge ({}%) and {} without ({}%)."
-          .format(len(bulged_pos), round(len(bulged_pos)/bulged_count*100, 1), len(xbulge_pos), round(len(xbulge_pos)/xbulge_count*100, 1)))
+#     print()
+#     print("Using (cubic) spline fits:")
+#     corr_pos = [c for c in spline_corr if c > 0]
+#     pos_rate = len(corr_pos) / galaxy_count
+#     print("No. of positive 1st derivative correlations =", len(corr_pos), ", i.e.", round(pos_rate*100, 1), "% of all galaxies.")
+#     bulged_pos = [c for c in bulged_corr if c > 0]
+#     xbulge_pos = [c for c in xbulge_corr if c > 0]
+#     print("Out of these, there are {} galaxies with bulge ({}%) and {} without ({}%)."
+#           .format(len(bulged_pos), round(len(bulged_pos)/bulged_count*100, 1), len(xbulge_pos), round(len(xbulge_pos)/xbulge_count*100, 1)))
     
-    corr2_pos = [c for c in d2_corr if c > 0]
-    pos_rate = len(corr2_pos) / galaxy_count
-    print("No. of positive 2nd derivative correlations =", len(corr2_pos), ", i.e.", round(pos_rate*100, 1), "% of all galaxies.")
-    bulged_pos = [c for c in bulged_corr2 if c > 0]
-    xbulge_pos = [c for c in xbulge_corr2 if c > 0]
-    print("Out of these, there are {} galaxies with bulge ({}%) and {} without ({}%)."
-          .format(len(bulged_pos), round(len(bulged_pos)/bulged_count*100, 1), len(xbulge_pos), round(len(xbulge_pos)/xbulge_count*100, 1)))
+#     corr2_pos = [c for c in d2_corr if c > 0]
+#     pos_rate = len(corr2_pos) / galaxy_count
+#     print("No. of positive 2nd derivative correlations =", len(corr2_pos), ", i.e.", round(pos_rate*100, 1), "% of all galaxies.")
+#     bulged_pos = [c for c in bulged_corr2 if c > 0]
+#     xbulge_pos = [c for c in xbulge_corr2 if c > 0]
+#     print("Out of these, there are {} galaxies with bulge ({}%) and {} without ({}%)."
+#           .format(len(bulged_pos), round(len(bulged_pos)/bulged_count*100, 1), len(xbulge_pos), round(len(xbulge_pos)/xbulge_count*100, 1)))
