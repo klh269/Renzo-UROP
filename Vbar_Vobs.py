@@ -303,7 +303,7 @@ for i in tqdm(range(galaxy_count)):
         plt.show()
         plt.close()
         
-        plt.title("Correlation of 2nd derivatives (Vobs & Vbar w.r.t. r) \n as a function of maximum " + r"$v_{bar}/v_{obs}$: " + g)
+        plt.title("Correlation of 2nd derivatives (Vobs & Vbar w.r.t. r) \n as a function of minimum " + r"$v_{bar}/v_{obs}$: " + g)
         plt.xlabel(r'$v_{bar}/v_{obs}$')
         plt.ylabel("Spearman correlation")
         plt.plot(fV, fV_corr)
