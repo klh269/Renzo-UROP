@@ -12,7 +12,8 @@ from jax import vmap
 import jax.numpy as jnp
 import jax.random as random
 
-from tqdm import tqdm
+import corner
+# from tqdm import tqdm
 
 import numpyro
 import numpyro.distributions as dist
@@ -28,7 +29,7 @@ from numpyro.infer import (
 
 matplotlib.use("Agg")  # noqa: E402
 
-testing = False
+testing = True
 
 # squared exponential kernel with diagonal noise term
 def kernel(X, Z, var, length, noise, jitter=1.0e-6, include_noise=True):
@@ -41,17 +42,18 @@ def kernel(X, Z, var, length, noise, jitter=1.0e-6, include_noise=True):
 
 def model(X, Y):
     # set uninformative log-normal priors on our three kernel hyperparameters
-    if len(r) >= 20:
-        var = numpyro.sample("kernel_var", dist.LogNormal(0.0, 1.0))
-        noise = numpyro.sample("kernel_noise", dist.LogNormal(0.0, 1.0))
-        length = numpyro.sample("kernel_length", dist.LogNormal(Rmax, max(r)/10))
-    else:
-        var = numpyro.sample("kernel_var", dist.LogNormal(0.0, 10.0))
-        noise = numpyro.sample("kernel_noise", dist.LogNormal(0.0, 10.0))
-        length = numpyro.sample("kernel_length", dist.LogNormal(0.0, 10.0))
+    # if len(r) >= 20:
+    var = numpyro.sample("kernel_var", dist.LogNormal(0.0, 1.0))
+    noise = numpyro.sample("kernel_noise", dist.LogNormal(0.0, 1.0))
+    length = numpyro.sample("kernel_length", dist.LogNormal(Rmax, max(r)/10))
+    # else:
+    # var2 = numpyro.sample("kernel_var2", dist.LogNormal(0.0, 10.0))
+    # noise2 = numpyro.sample("kernel_noise2", dist.LogNormal(0.0, 10.0))
+    # length2 = numpyro.sample("kernel_length2", dist.LogNormal(0.0, 10.0))
 
     # compute kernel
     k = kernel(X, X, var, length, noise)
+    # k2 = kernel(X, X, var2, length2, noise2)
 
     # sample Y according to the standard gaussian process formula
     numpyro.sample(
@@ -126,10 +128,6 @@ def main(args, g, X, Y, X_test, bulged):
         """
         Do inference for Vobs, Vbar, Vgas, Vdisk and Vbul.
         """
-        print("==================================")
-        print("Analyzing galaxy "+g)
-        print("==================================")
-
         v_list = [ "Vobs", "Vbar", "Vgas", "Vdisk", "Vbul" ]
         for i in range(len(Y)):
             if i==4 and not bulged:
@@ -174,7 +172,7 @@ def main(args, g, X, Y, X_test, bulged):
         plt.plot(X_test, mean_prediction[2], color="green", label="Vgas")
         plt.plot(X_test, mean_prediction[3]*pdisk, color="blue", label="Vdisk")
 
-        # plot 90% confidence level of predictions for Vobs and Vbar.
+        # plot 68% (1 sigma) confidence level of predictions for Vobs and Vbar.
         plt.fill_between(X_test, percentiles[0][0, :], percentiles[0][1, :], color="k", alpha=0.2)
         plt.fill_between(X_test, percentiles[1][0, :], percentiles[1][1, :], color="red", alpha=0.2)
         plt.fill_between(X_test, percentiles[2][0, :], percentiles[2][1, :], color="green", alpha=0.2)
@@ -187,8 +185,11 @@ def main(args, g, X, Y, X_test, bulged):
             plt.fill_between(X_test, percentiles[4][0, :]*pbul, percentiles[4][1, :]*pbul, color="darkorange", alpha=0.2)
         
         plt.legend(bbox_to_anchor=(1,1), loc="upper left")
-        plt.savefig("/mnt/users/koe/Oxford-UROP/plots/gaussian_process/"+g+".png", dpi=300, bbox_inches="tight")
+        plt.savefig("/mnt/users/koe/plots/gaussian_process/tests/"+g+".png", dpi=300, bbox_inches="tight")
         plt.close()
+
+        # fig = corner.corner(samples, show_titles=True, labels=["var", "length", "noise"], plot_datapoints=True, quantiles=[0.16, 0.5, 0.84], smooth=1)
+        # fig.savefig("/mnt/users/koe/plots/gp_2ker/"+g+"_corner.png", dpi=300, bbox_inches="tight")
 
 
 if __name__ == "__main__":
@@ -213,7 +214,7 @@ if __name__ == "__main__":
     numpyro.set_host_device_count(args.num_chains)
 
     # Get galaxy data from table1.
-    file = "/mnt/users/koe/Oxford-UROP/SPARC_Lelli2016c.mrt.txt"
+    file = "/mnt/users/koe/SPARC_Lelli2016c.mrt.txt"
 
     SPARC_c = [ "Galaxy", "T", "D", "e_D", "f_D", "Inc",
             "e_Inc", "L", "e_L", "Reff", "SBeff", "Rdisk",
@@ -251,23 +252,27 @@ if __name__ == "__main__":
     bulged_corr2 = []
     xbulge_corr2 = []
     
-    for i in tqdm(range(galaxy_count)):
+    for i in range(galaxy_count):
         g = table["Galaxy"][i]
+        g = "UGC03580"
         
         if g=="D512-2" or g=="D564-8" or g=="D631-7" or g=="NGC4138" or g=="NGC5907" or g=="UGC06818":
             skips += 1
             continue
-        
+
         """
         Plotting galaxy rotation curves directly from data with variables:
         Vobs (overall observed, corrected for inclination), Vgas, Vdisk, Vbul.
         """
-        file_path = "/mnt/users/koe/Oxford-UROP/data/"+g+"_rotmod.dat"
+        file_path = "/mnt/users/koe/data/"+g+"_rotmod.dat"
         rawdata = np.loadtxt(file_path)
         data = pd.DataFrame(rawdata, columns=columns)
         bulged = np.any(data["Vbul"]>0) # Check whether galaxy has bulge.
         r = data["Rad"] / table["Rdisk"][i] # Normalised radius (Rdisk = scale length of stellar disk).
-        
+
+        # Test: Change radius to index instead s.t. everything is evenly spaced
+        # r = np.array(range(len(r)))
+
         Rmax = max(np.diff(r)) # Maximum difference in r of data points (to be used as length scale for GP kernel)
 
         # Normalise velocities by Vmax = max(Vobs).
@@ -278,7 +283,33 @@ if __name__ == "__main__":
         nVgas = data["Vgas"] / Vmax
         nVdisk = data["Vdisk"] / Vmax
         nVbul = data["Vbul"] / Vmax
-        
+
+        # Test: Remove first 1-2 data point might help?
+        # r = np.delete(r, 0)
+        # nVobs = np.delete(nVobs, 0)
+        # nVbar = np.delete(nVbar, 0)
+        # nVgas = np.delete(nVgas, 0)
+        # nVdisk = np.delete(nVdisk, 0)
+        # if bulged:
+        #     nVbul = np.delete(nVbul, 0)
+
+        # Test: Downsample the high-res part of our data.
+        # j = 0
+        # for k in range(100):
+        #     if j < len(r)-1:
+        #         if r[j] < 10 and np.diff(r)[j] < Rmax/3:
+        #             r = np.delete(r, j+1)
+        #             nVobs = np.delete(nVobs, j+1)
+        #             nVbar = np.delete(nVbar, j+1)
+        #             nVgas = np.delete(nVgas, j+1)
+        #             nVdisk = np.delete(nVdisk, j+1)
+        #             if bulged:
+        #                 nVbul = np.delete(nVbul, j+1)
+        #         else:
+        #             j += 1
+        #     else:
+        #         continue
+            
         if bulged:
             bulged_count += 1
         else:
@@ -286,11 +317,20 @@ if __name__ == "__main__":
         
         rad = np.linspace(r[0], r[len(r)-1], num=1000)
 
-        def standardize(arr):
-            std_arr = (arr.to_numpy() - np.mean(arr)) / np.std(arr)
-            return std_arr
+        # def standardize(arr):
+        #     std_arr = (arr.to_numpy() - np.mean(arr)) / np.std(arr)
+        #     return std_arr
 
-        X, X_test = r.to_numpy(), rad
+        # X, X_test = r.to_numpy(), rad
         Y = np.array([ nVobs.to_numpy(), nVbar.to_numpy(), nVgas.to_numpy(), nVdisk.to_numpy(), nVbul.to_numpy() ])
-    
+        # Y = np.array([ nVobs.to_numpy(), nVbar.to_numpy() ])
+
+        X, X_test = r, rad
+        # Y = np.array([ nVobs, nVbar, nVgas, nVdisk, nVbul ])
+              
+        print("")
+        print("==================================")
+        print("Analyzing galaxy "+g+" ("+str(i+1)+"/175)")
+        print("==================================")
+
         main(args, g, X, Y, X_test, bulged)
