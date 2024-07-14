@@ -48,9 +48,9 @@ def model(X, Y):
     noise = numpyro.sample("kernel_noise", dist.LogNormal(0.0, 1.0))
     length = numpyro.sample("kernel_length", dist.Normal(Rmax, max(r)/10))
     # else:
-    # var2 = numpyro.sample("kernel_var2", dist.LogNormal(0.0, 1.0))
-    # noise2 = numpyro.sample("kernel_noise2", dist.LogNormal(0.0, 1.0))
-    # length2 = numpyro.sample("kernel_length2", dist.TruncatedNormal(0.0, max(r)/10, low=0.))
+    #     var = numpyro.sample("kernel_var", dist.LogNormal(0.0, 10.0))
+    #     noise = numpyro.sample("kernel_noise", dist.LogNormal(0.0, 10.0))
+    #     length = numpyro.sample("kernel_length", dist.LogNormal(0.0, 10.0))
 
     # compute kernel
     k = kernel(X, X, var, length, noise)
@@ -194,8 +194,8 @@ def main(args, g, X, Y, X_test, bulged):
         res_Vbar = []
         for k in range(len(X)):
             idx = (np.abs(X_test - X[k])).argmin()
-            res_Vobs.append(mean_prediction[0][idx] - Y[0][k])
-            res_Vbar.append(mean_prediction[1][idx] - Y[1][k])
+            res_Vobs.append(Y[0][k] - mean_prediction[0][idx])
+            res_Vbar.append(Y[1][k] - mean_prediction[1][idx])
 
         frame2 = fig0.add_axes((.1,.1,.8,.2))
         plt.xlabel(r'Normalised radius ($\times R_{eff}$)')
