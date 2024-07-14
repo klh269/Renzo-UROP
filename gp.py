@@ -6,6 +6,7 @@ import time
 import matplotlib
 import matplotlib.pyplot as plt
 import numpy as np
+from scipy import signal
 
 import jax
 from jax import vmap
@@ -29,7 +30,7 @@ from numpyro.infer import (
 
 matplotlib.use("Agg")  # noqa: E402
 
-testing = True
+testing = False
 
 # squared exponential kernel with diagonal noise term
 def kernel(X, Z, var, length, noise, jitter=1.0e-6, include_noise=True):
@@ -45,11 +46,11 @@ def model(X, Y):
     # if len(r) >= 20:
     var = numpyro.sample("kernel_var", dist.LogNormal(0.0, 1.0))
     noise = numpyro.sample("kernel_noise", dist.LogNormal(0.0, 1.0))
-    length = numpyro.sample("kernel_length", dist.LogNormal(Rmax, max(r)/10))
+    length = numpyro.sample("kernel_length", dist.Normal(Rmax, max(r)/10))
     # else:
-    # var2 = numpyro.sample("kernel_var2", dist.LogNormal(0.0, 10.0))
-    # noise2 = numpyro.sample("kernel_noise2", dist.LogNormal(0.0, 10.0))
-    # length2 = numpyro.sample("kernel_length2", dist.LogNormal(0.0, 10.0))
+    # var2 = numpyro.sample("kernel_var2", dist.LogNormal(0.0, 1.0))
+    # noise2 = numpyro.sample("kernel_noise2", dist.LogNormal(0.0, 1.0))
+    # length2 = numpyro.sample("kernel_length2", dist.TruncatedNormal(0.0, max(r)/10, low=0.))
 
     # compute kernel
     k = kernel(X, X, var, length, noise)
@@ -72,7 +73,7 @@ def run_inference(model, args, rng_key, X, Y):
             values={"kernel_var": 1.0, "kernel_noise": 0.05, "kernel_length": 0.5}
         )
     elif args.init_strategy == "median":
-        init_strategy = init_to_median(num_samples=10)
+        init_strategy = init_to_median(num_samples=1000)
     elif args.init_strategy == "feasible":
         init_strategy = init_to_feasible()
     elif args.init_strategy == "sample":
@@ -156,36 +157,57 @@ def main(args, g, X, Y, X_test, bulged):
         """
         Make plots.
         """
-        # plot training data.
+        fig0 = plt.figure(1)
+        frame1 = fig0.add_axes((.1,.3,.8,.6))
         plt.title("Gaussian process: "+g)
-        plt.xlabel(xlabel="Normalised radius "+r"($\times R_{eff}$)")
+        # plt.xlabel(xlabel="Normalised radius "+r"($\times R_{eff}$)")
         plt.ylabel("Normalised velocities")
 
         plt.scatter(X, Y[0], color="k", alpha=0.3) # Vobs
         plt.scatter(X, Y[1], color="red", alpha=0.3) # Vbar
         plt.scatter(X, Y[2], color="green", alpha=0.3) # Vgas
-        plt.scatter(X, Y[3]*pdisk, color="blue", alpha=0.3) # Vdisk
+        plt.scatter(X, Y[3]*np.sqrt(pdisk), color="blue", alpha=0.3) # Vdisk
         
         # plot mean predictions.
         plt.plot(X_test, mean_prediction[0], color="k", label="Vobs")
         plt.plot(X_test, mean_prediction[1], color="red", label="Vbar")
         plt.plot(X_test, mean_prediction[2], color="green", label="Vgas")
-        plt.plot(X_test, mean_prediction[3]*pdisk, color="blue", label="Vdisk")
+        plt.plot(X_test, mean_prediction[3]*np.sqrt(pdisk), color="blue", label="Vdisk")
 
         # plot 68% (1 sigma) confidence level of predictions for Vobs and Vbar.
         plt.fill_between(X_test, percentiles[0][0, :], percentiles[0][1, :], color="k", alpha=0.2)
         plt.fill_between(X_test, percentiles[1][0, :], percentiles[1][1, :], color="red", alpha=0.2)
         plt.fill_between(X_test, percentiles[2][0, :], percentiles[2][1, :], color="green", alpha=0.2)
-        plt.fill_between(X_test, percentiles[3][0, :]*pdisk, percentiles[3][1, :]*pdisk, color="blue", alpha=0.2)
+        plt.fill_between(X_test, percentiles[3][0, :]*np.sqrt(pdisk), percentiles[3][1, :]*np.sqrt(pdisk), color="blue", alpha=0.2)
 
         # Same thing for galaxies w/ bulge.
         if bulged:
-            plt.scatter(X, Y[4]*pbul, color="darkorange", alpha=0.3)
-            plt.plot(X_test, mean_prediction[4]*pbul, color="darkorange", label="Vbul")
-            plt.fill_between(X_test, percentiles[4][0, :]*pbul, percentiles[4][1, :]*pbul, color="darkorange", alpha=0.2)
+            plt.scatter(X, Y[4]*np.sqrt(pbul), color="darkorange", alpha=0.3)
+            plt.plot(X_test, mean_prediction[4]*np.sqrt(pbul), color="darkorange", label="Vbul")
+            plt.fill_between(X_test, percentiles[4][0, :]*np.sqrt(pbul), percentiles[4][1, :]*np.sqrt(pbul), color="darkorange", alpha=0.2)
         
         plt.legend(bbox_to_anchor=(1,1), loc="upper left")
-        plt.savefig("/mnt/users/koe/plots/gaussian_process/tests/"+g+".png", dpi=300, bbox_inches="tight")
+        plt.grid()
+        
+        # Compute residuals of fits.
+        res_Vobs = []
+        res_Vbar = []
+        for k in range(len(X)):
+            idx = (np.abs(X_test - X[k])).argmin()
+            res_Vobs.append(mean_prediction[0][idx] - Y[0][k])
+            res_Vbar.append(mean_prediction[1][idx] - Y[1][k])
+
+        frame2 = fig0.add_axes((.1,.1,.8,.2))
+        plt.xlabel(r'Normalised radius ($\times R_{eff}$)')
+        plt.ylabel("Residuals")
+        plt.scatter(r, res_Vobs, color='k', alpha=0.3, label="Vobs")
+        plt.scatter(r, res_Vbar, color='red', alpha=0.3, label="Vbar")
+        # plt.scatter(r, res_Vgas, color='green', alpha=0.3)
+        # plt.scatter(r, res_Vdisk, color='blue', alpha=0.3)
+        plt.legend(bbox_to_anchor=(1,1), loc="upper left")
+        plt.grid()
+
+        fig0.savefig("/mnt/users/koe/plots/gp_normal/"+g+".png", dpi=300, bbox_inches="tight")
         plt.close()
 
         # fig = corner.corner(samples, show_titles=True, labels=["var", "length", "noise"], plot_datapoints=True, quantiles=[0.16, 0.5, 0.84], smooth=1)
@@ -254,8 +276,10 @@ if __name__ == "__main__":
     
     for i in range(galaxy_count):
         g = table["Galaxy"][i]
-        g = "UGC03580"
-        
+
+        if testing:
+            g = "UGC03580"
+            
         if g=="D512-2" or g=="D564-8" or g=="D631-7" or g=="NGC4138" or g=="NGC5907" or g=="UGC06818":
             skips += 1
             continue
@@ -309,7 +333,17 @@ if __name__ == "__main__":
         #             j += 1
         #     else:
         #         continue
-            
+        
+        # """
+        # Apply SG filter to data.
+        # """
+        # nVobs = signal.savgol_filter(nVobs, 5, 2)
+        # nVbar = signal.savgol_filter(nVbar, 5, 2)
+        # nVgas = signal.savgol_filter(nVgas, 5, 2)
+        # nVdisk = signal.savgol_filter(nVdisk, 5, 2)
+        # if bulged:
+        #     nVbul = signal.savgol_filter(nVbul, 5, 2)
+
         if bulged:
             bulged_count += 1
         else:
@@ -321,12 +355,11 @@ if __name__ == "__main__":
         #     std_arr = (arr.to_numpy() - np.mean(arr)) / np.std(arr)
         #     return std_arr
 
-        # X, X_test = r.to_numpy(), rad
-        Y = np.array([ nVobs.to_numpy(), nVbar.to_numpy(), nVgas.to_numpy(), nVdisk.to_numpy(), nVbul.to_numpy() ])
-        # Y = np.array([ nVobs.to_numpy(), nVbar.to_numpy() ])
+        X, X_test = r.to_numpy(), rad
+        # Y = np.array([ nVobs.to_numpy(), nVbar.to_numpy(), nVgas.to_numpy(), nVdisk.to_numpy(), nVbul.to_numpy() ])
 
-        X, X_test = r, rad
-        # Y = np.array([ nVobs, nVbar, nVgas, nVdisk, nVbul ])
+        # X, X_test = r, rad
+        Y = np.array([ nVobs, nVbar, nVgas, nVdisk, nVbul ])
               
         print("")
         print("==================================")
