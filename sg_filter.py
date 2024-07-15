@@ -6,7 +6,7 @@ from scipy import interpolate
 
 from tqdm import tqdm
 
-testing = False
+testing = True
 
 file = "C:/Users/admin/OneDrive/Desktop/Other/Oxford UROP 2024/SPARC_Lelli2016c.mrt.txt"
 
@@ -40,6 +40,9 @@ galaxy = []
 
 for i in tqdm(range(galaxy_count)):
     g = table["Galaxy"][i]
+    
+    if testing:
+        g = "UGC03580"
 
     if g=="D512-2" or g=="D564-8" or g=="D631-7" or g=="NGC4138" or g=="NGC5907" or g=="UGC06818":
         skips += 1
@@ -77,8 +80,8 @@ for i in tqdm(range(galaxy_count)):
     """
     Apply SG filter to data.
     """
-    Vobs_sg = signal.savgol_filter(nVobs, 5, 2, deriv=0)
-    Vbar_sg = signal.savgol_filter(nVbar, 5, 2, deriv=0)
+    Vobs_sg = signal.savgol_filter(nVobs, 5, 2, deriv=2)
+    Vbar_sg = signal.savgol_filter(nVbar, 5, 2, deriv=2)
     Vgas_sg = signal.savgol_filter(nVgas, 5, 2, deriv=0)
     Vdisk_sg = signal.savgol_filter(nVdisk, 5, 2, deriv=0)
     if bulged:
@@ -87,40 +90,43 @@ for i in tqdm(range(galaxy_count)):
     """
     Fit (quartic) splines through data and Vbar (reconstructed).
     """
-    # Vobs_spline = interpolate.UnivariateSpline(r, Vobs_sg, k=4, s=0)
-    # Vbar_spline = interpolate.UnivariateSpline(r, Vbar_sg, k=4, s=0)
-    # Vgas_spline = interpolate.UnivariateSpline(r, Vgas_sg, k=4, s=0)
-    # Vdisk_spline = interpolate.UnivariateSpline(r, Vdisk_sg, k=4, s=0)
-    # if bulged:
-    #     Vbul_spline = interpolate.UnivariateSpline(r, Vbul_sg, k=4, s=0)
+    Vobs_spline = interpolate.UnivariateSpline(r, Vobs_sg, k=4, s=0)
+    Vbar_spline = interpolate.UnivariateSpline(r, Vbar_sg, k=4, s=0)
+    Vgas_spline = interpolate.UnivariateSpline(r, Vgas_sg, k=4, s=0)
+    Vdisk_spline = interpolate.UnivariateSpline(r, Vdisk_sg, k=4, s=0)
+    if bulged:
+        Vbul_spline = interpolate.UnivariateSpline(r, Vbul_sg, k=4, s=0)
 
     rad = np.linspace(r[0], r[len(r)-1], num=10000)
 
     plt.title("SG filter: "+g)
     plt.xlabel(r'Normalised radius ($\times R_{eff}$)')
-    plt.ylabel('Normalised velocities')
+    plt.ylabel('Second derivative')
     
-    plt.errorbar(r, nVobs, yerr=data["errV"]/Vmax, color='k', fmt="o", capsize=3, alpha=0.3)
-    plt.scatter(r, nVbar, color='red', alpha=0.3)
-    plt.scatter(r, nVgas, color="green", alpha=0.3)
-    plt.scatter(r, nVdisk*np.sqrt(pdisk), color="blue", alpha=0.3)
+    # plt.errorbar(r, nVobs, yerr=data["errV"]/Vmax, color='k', fmt="o", capsize=3, alpha=0.3)
+    # plt.scatter(r, nVbar, color='red', alpha=0.3)
+    # plt.scatter(r, nVgas, color="green", alpha=0.3)
+    # plt.scatter(r, nVdisk*np.sqrt(pdisk), color="blue", alpha=0.3)
 
-    plt.plot(r, Vobs_sg, color='k', label="Vobs")
-    plt.plot(r, Vbar_sg, color='red', label="Vbar")
-    plt.plot(r, Vgas_sg, color='green', label="Vgas")
-    plt.plot(r, Vdisk_sg*np.sqrt(pdisk), color='blue', label="Vdisk")
+    # plt.plot(r, Vobs_sg, color='k', label="Vobs")
+    # plt.plot(r, Vbar_sg, color='red', label="Vbar")
+    # plt.plot(r, Vgas_sg, color='green', label="Vgas")
+    # plt.plot(r, Vdisk_sg*np.sqrt(pdisk), color='blue', label="Vdisk")
+    
+    plt.scatter(r, Vobs_sg, color='k', label="Vobs", alpha=0.5)
+    plt.scatter(r, Vbar_sg, color='red', label="Vbar", alpha=0.5)
     
     # plt.plot(rad, Vobs_spline(rad), color='k', label="Vobs")
     # plt.plot(rad, Vbar_spline(rad), color='red', label="Vbar")
     # plt.plot(rad, Vgas_spline(rad), color='green', label="Vgas")
     # plt.plot(rad, Vdisk_spline(rad)*np.sqrt(pdisk), color='blue', label="Vdisk")
 
-    if bulged:
-        plt.scatter(r, nVbul*np.sqrt(pbul), color="darkorange", alpha=0.3)
-        plt.plot(r, Vbul_sg*np.sqrt(pbul), color='darkorange', label="Vbul")
+    # if bulged:
+    #     plt.scatter(r, nVbul*np.sqrt(pbul), color="darkorange", alpha=0.3)
+    #     plt.plot(r, Vbul_sg*np.sqrt(pbul), color='darkorange', label="Vbul")
         # plt.plot(rad, Vbul_spline(rad)*np.sqrt(pbul), color='darkorange', label="Vbul")
 
     plt.legend(bbox_to_anchor=(1,1), loc="upper left")
-    plt.savefig("C:/Users/admin/OneDrive/Desktop/Other/Oxford UROP 2024/plots/sg_filter/"+g+".png", dpi=300, bbox_inches="tight")
+    plt.savefig("C:/Users/admin/OneDrive/Desktop/Other/Oxford UROP 2024/plots/sg_filter/deriv2/"+g+".png", dpi=300, bbox_inches="tight")
     plt.show()
     plt.close()
