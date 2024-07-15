@@ -6,7 +6,7 @@ import time
 import matplotlib
 import matplotlib.pyplot as plt
 import numpy as np
-from scipy import signal
+from scipy import signal, interpolate
 
 import jax
 from jax import vmap
@@ -31,6 +31,8 @@ from numpyro.infer import (
 matplotlib.use("Agg")  # noqa: E402
 
 testing = False
+test_galaxy = "UGC03580"
+fileloc = "/mnt/users/koe/plots/gp_uniform/"
 
 # squared exponential kernel with diagonal noise term
 def kernel(X, Z, var, length, noise, jitter=1.0e-6, include_noise=True):
@@ -46,11 +48,15 @@ def model(X, Y):
     # if len(r) >= 20:
     var = numpyro.sample("kernel_var", dist.LogNormal(0.0, 1.0))
     noise = numpyro.sample("kernel_noise", dist.LogNormal(0.0, 1.0))
-    length = numpyro.sample("kernel_length", dist.Normal(Rmax, max(r)/10))
+    # length = numpyro.sample("kernel_length", dist.TruncatedNormal(Rmax/2, max(r)/10, low=0., high=Rmax*1.5))
+    # if len(r) >= 20:
+    #     length = numpyro.sample("kernel_length", dist.Uniform(0., Rmax*2))
     # else:
-    #     var = numpyro.sample("kernel_var", dist.LogNormal(0.0, 10.0))
-    #     noise = numpyro.sample("kernel_noise", dist.LogNormal(0.0, 10.0))
-    #     length = numpyro.sample("kernel_length", dist.LogNormal(0.0, 10.0))
+    length = numpyro.sample("kernel_length", dist.Uniform(0., max(X)))
+    # else:
+    # var2 = numpyro.sample("kernel_var2", dist.LogNormal(0.0, 10.0))
+    # noise2 = numpyro.sample("kernel_noise2", dist.LogNormal(0.0, 10.0))
+    # length2 = numpyro.sample("kernel_length2", dist.Normal(0.0, 10.0))
 
     # compute kernel
     k = kernel(X, X, var, length, noise)
@@ -123,13 +129,17 @@ def predict(rng_key, X, Y, X_test, var, length, noise, use_cholesky=True):
     return mean, mean + sigma_noise
 
 def main(args, g, X, Y, X_test, bulged):
-        mean_prediction = []
-        percentiles = []
+        # Cubic Hermite Spline fit.
+        # v_splines = []
+        # for v_comp in Y:
+        #     v_splines.append(interpolate.pchip_interpolate(X, v_comp, X_test))
 
         """
         Do inference for Vobs, Vbar, Vgas, Vdisk and Vbul.
         """
         v_list = [ "Vobs", "Vbar", "Vgas", "Vdisk", "Vbul" ]
+        mean_prediction = []
+        percentiles = []
         for i in range(len(Y)):
             if i==4 and not bulged:
                 continue
@@ -154,6 +164,9 @@ def main(args, g, X, Y, X_test, bulged):
             mean_prediction.append(np.mean(means, axis=0))
             percentiles.append(np.percentile(predictions, [16.0, 84.0], axis=0))
 
+            fig = corner.corner(samples, show_titles=True, labels=["length", "noise", "var"], plot_datapoints=True, quantiles=[0.16, 0.5, 0.84], smooth=1)
+            fig.savefig(fileloc+g+"_corner_"+v_list[i]+".png", dpi=300, bbox_inches="tight")
+
         """
         Make plots.
         """
@@ -165,26 +178,30 @@ def main(args, g, X, Y, X_test, bulged):
 
         plt.scatter(X, Y[0], color="k", alpha=0.3) # Vobs
         plt.scatter(X, Y[1], color="red", alpha=0.3) # Vbar
-        plt.scatter(X, Y[2], color="green", alpha=0.3) # Vgas
-        plt.scatter(X, Y[3]*np.sqrt(pdisk), color="blue", alpha=0.3) # Vdisk
+        # plt.scatter(X, Y[2], color="green", alpha=0.3) # Vgas
+        # plt.scatter(X, Y[3]*np.sqrt(pdisk), color="blue", alpha=0.3) # Vdisk
+
+        # Plot splines from pchip_interpolate.
+        # plt.plot(X_test, v_splines[0], '--', color="k", label="Vobs_spline", alpha=0.5)
+        # plt.plot(X_test, v_splines[1], '--', color="red", label="Vbar_spline", alpha=0.5)
         
         # plot mean predictions.
         plt.plot(X_test, mean_prediction[0], color="k", label="Vobs")
         plt.plot(X_test, mean_prediction[1], color="red", label="Vbar")
-        plt.plot(X_test, mean_prediction[2], color="green", label="Vgas")
-        plt.plot(X_test, mean_prediction[3]*np.sqrt(pdisk), color="blue", label="Vdisk")
+        # plt.plot(X_test, mean_prediction[2], color="green", label="Vgas")
+        # plt.plot(X_test, mean_prediction[3]*np.sqrt(pdisk), color="blue", label="Vdisk")
 
         # plot 68% (1 sigma) confidence level of predictions for Vobs and Vbar.
         plt.fill_between(X_test, percentiles[0][0, :], percentiles[0][1, :], color="k", alpha=0.2)
         plt.fill_between(X_test, percentiles[1][0, :], percentiles[1][1, :], color="red", alpha=0.2)
-        plt.fill_between(X_test, percentiles[2][0, :], percentiles[2][1, :], color="green", alpha=0.2)
-        plt.fill_between(X_test, percentiles[3][0, :]*np.sqrt(pdisk), percentiles[3][1, :]*np.sqrt(pdisk), color="blue", alpha=0.2)
+        # plt.fill_between(X_test, percentiles[2][0, :], percentiles[2][1, :], color="green", alpha=0.2)
+        # plt.fill_between(X_test, percentiles[3][0, :]*np.sqrt(pdisk), percentiles[3][1, :]*np.sqrt(pdisk), color="blue", alpha=0.2)
 
         # Same thing for galaxies w/ bulge.
-        if bulged:
-            plt.scatter(X, Y[4]*np.sqrt(pbul), color="darkorange", alpha=0.3)
-            plt.plot(X_test, mean_prediction[4]*np.sqrt(pbul), color="darkorange", label="Vbul")
-            plt.fill_between(X_test, percentiles[4][0, :]*np.sqrt(pbul), percentiles[4][1, :]*np.sqrt(pbul), color="darkorange", alpha=0.2)
+        # if bulged:
+        #     plt.scatter(X, Y[4]*np.sqrt(pbul), color="darkorange", alpha=0.3)
+        #     plt.plot(X_test, mean_prediction[4]*np.sqrt(pbul), color="darkorange", label="Vbul")
+        #     plt.fill_between(X_test, percentiles[4][0, :]*np.sqrt(pbul), percentiles[4][1, :]*np.sqrt(pbul), color="darkorange", alpha=0.2)
         
         plt.legend(bbox_to_anchor=(1,1), loc="upper left")
         plt.grid()
@@ -207,11 +224,8 @@ def main(args, g, X, Y, X_test, bulged):
         plt.legend(bbox_to_anchor=(1,1), loc="upper left")
         plt.grid()
 
-        fig0.savefig("/mnt/users/koe/plots/gp_normal/"+g+".png", dpi=300, bbox_inches="tight")
+        fig0.savefig(fileloc+g+".png", dpi=300, bbox_inches="tight")
         plt.close()
-
-        # fig = corner.corner(samples, show_titles=True, labels=["var", "length", "noise"], plot_datapoints=True, quantiles=[0.16, 0.5, 0.84], smooth=1)
-        # fig.savefig("/mnt/users/koe/plots/gp_2ker/"+g+"_corner.png", dpi=300, bbox_inches="tight")
 
 
 if __name__ == "__main__":
@@ -278,7 +292,7 @@ if __name__ == "__main__":
         g = table["Galaxy"][i]
 
         if testing:
-            g = "UGC03580"
+            g = test_galaxy
             
         if g=="D512-2" or g=="D564-8" or g=="D631-7" or g=="NGC4138" or g=="NGC5907" or g=="UGC06818":
             skips += 1
@@ -333,16 +347,6 @@ if __name__ == "__main__":
         #             j += 1
         #     else:
         #         continue
-        
-        # """
-        # Apply SG filter to data.
-        # """
-        # nVobs = signal.savgol_filter(nVobs, 5, 2)
-        # nVbar = signal.savgol_filter(nVbar, 5, 2)
-        # nVgas = signal.savgol_filter(nVgas, 5, 2)
-        # nVdisk = signal.savgol_filter(nVdisk, 5, 2)
-        # if bulged:
-        #     nVbul = signal.savgol_filter(nVbul, 5, 2)
 
         if bulged:
             bulged_count += 1
@@ -351,19 +355,28 @@ if __name__ == "__main__":
         
         rad = np.linspace(r[0], r[len(r)-1], num=1000)
 
-        # def standardize(arr):
-        #     std_arr = (arr.to_numpy() - np.mean(arr)) / np.std(arr)
-        #     return std_arr
+        # """
+        # Apply SG filter to data.
+        # """
+        # nVobs_sg = signal.savgol_filter(nVobs, 5, 3)
+        # nVbar_sg = signal.savgol_filter(nVbar, 5, 2)
+        # nVgas_sg = signal.savgol_filter(nVgas, 5, 2)
+        # nVdisk_sg = signal.savgol_filter(nVdisk, 5, 2)
+        # if bulged:
+        #     nVbul_sg = signal.savgol_filter(nVbul, 5, 2)
 
         X, X_test = r.to_numpy(), rad
         # Y = np.array([ nVobs.to_numpy(), nVbar.to_numpy(), nVgas.to_numpy(), nVdisk.to_numpy(), nVbul.to_numpy() ])
 
         # X, X_test = r, rad
-        Y = np.array([ nVobs, nVbar, nVgas, nVdisk, nVbul ])
+        # Y = np.array([ nVobs, nVbar, nVgas, nVdisk, nVbul ])
+
+        Y = np.array([ nVobs, nVbar ])
               
         print("")
         print("==================================")
         print("Analyzing galaxy "+g+" ("+str(i+1)+"/175)")
         print("==================================")
+        print("Rmax =", Rmax)
 
         main(args, g, X, Y, X_test, bulged)
