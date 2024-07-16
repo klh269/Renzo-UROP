@@ -7,6 +7,7 @@ import matplotlib
 import matplotlib.pyplot as plt
 import numpy as np
 from scipy import signal, interpolate
+import math
 
 import jax
 from jax import vmap
@@ -30,9 +31,9 @@ from numpyro.infer import (
 
 matplotlib.use("Agg")  # noqa: E402
 
-testing = False
+testing = True
 test_galaxy = "UGC03580"
-fileloc = "/mnt/users/koe/plots/gp_uniform/"
+fileloc = "/mnt/users/koe/plots/gp_pchip/"
 
 # squared exponential kernel with diagonal noise term
 def kernel(X, Z, var, length, noise, jitter=1.0e-6, include_noise=True):
@@ -129,13 +130,17 @@ def predict(rng_key, X, Y, X_test, var, length, noise, use_cholesky=True):
     return mean, mean + sigma_noise
 
 def main(args, g, X, Y, X_test, bulged):
-        # Cubic Hermite Spline fit.
-        # v_splines = []
-        # for v_comp in Y:
-        #     v_splines.append(interpolate.pchip_interpolate(X, v_comp, X_test))
+        """
+        Upsample the data using cubic Hermite spline fits.
+        """
+        upsample_count = math.ceil(max(r)/Rmin + 1)
+        X_new = np.linspace(Rmin, Rmax, upsample_count)
+        Y_new = []
+        for v_comp in Y:
+            Y_new.append(interpolate.pchip_interpolate(X, v_comp, X_new))
 
         """
-        Do inference for Vobs, Vbar, Vgas, Vdisk and Vbul.
+        Do inference for each velocity compenent separately.
         """
         v_list = [ "Vobs", "Vbar", "Vgas", "Vdisk", "Vbul" ]
         mean_prediction = []
@@ -146,7 +151,7 @@ def main(args, g, X, Y, X_test, bulged):
             
             print("Fitting function to " + v_list[i])
             rng_key, rng_key_predict = random.split(random.PRNGKey(0))
-            samples = run_inference(model, args, rng_key, X, Y[i])
+            samples = run_inference(model, args, rng_key, X_new, Y_new[i])
 
             # do prediction
             vmap_args = (
@@ -157,7 +162,7 @@ def main(args, g, X, Y, X_test, bulged):
             )
             means, predictions = vmap(
                 lambda rng_key, var, length, noise: predict(
-                    rng_key, X, Y[i], X_test, var, length, noise, use_cholesky=args.use_cholesky
+                    rng_key, X_new, Y_new[i], X_test, var, length, noise, use_cholesky=args.use_cholesky
                 )
             )(*vmap_args)
 
@@ -171,7 +176,7 @@ def main(args, g, X, Y, X_test, bulged):
         Make plots.
         """
         fig0 = plt.figure(1)
-        frame1 = fig0.add_axes((.1,.3,.8,.6))
+        frame1 = fig0.add_axes((.1,.3,.3,.6))
         plt.title("Gaussian process: "+g)
         # plt.xlabel(xlabel="Normalised radius "+r"($\times R_{eff}$)")
         plt.ylabel("Normalised velocities")
@@ -182,8 +187,8 @@ def main(args, g, X, Y, X_test, bulged):
         # plt.scatter(X, Y[3]*np.sqrt(pdisk), color="blue", alpha=0.3) # Vdisk
 
         # Plot splines from pchip_interpolate.
-        # plt.plot(X_test, v_splines[0], '--', color="k", label="Vobs_spline", alpha=0.5)
-        # plt.plot(X_test, v_splines[1], '--', color="red", label="Vbar_spline", alpha=0.5)
+        plt.plot(X_new, Y_new[0], '--', color="k", label="Vobs_spline", alpha=0.5)
+        plt.plot(X_new, Y_new[1], '--', color="red", label="Vbar_spline", alpha=0.5)
         
         # plot mean predictions.
         plt.plot(X_test, mean_prediction[0], color="k", label="Vobs")
@@ -214,7 +219,7 @@ def main(args, g, X, Y, X_test, bulged):
             res_Vobs.append(Y[0][k] - mean_prediction[0][idx])
             res_Vbar.append(Y[1][k] - mean_prediction[1][idx])
 
-        frame2 = fig0.add_axes((.1,.1,.8,.2))
+        frame2 = fig0.add_axes((.1,.1,.3,.2))
         plt.xlabel(r'Normalised radius ($\times R_{eff}$)')
         plt.ylabel("Residuals")
         plt.scatter(r, res_Vobs, color='k', alpha=0.3, label="Vobs")
@@ -289,6 +294,9 @@ if __name__ == "__main__":
     xbulge_corr2 = []
     
     for i in range(galaxy_count):
+        # if i < 169:
+        #     continue
+
         g = table["Galaxy"][i]
 
         if testing:
@@ -312,6 +320,7 @@ if __name__ == "__main__":
         # r = np.array(range(len(r)))
 
         Rmax = max(np.diff(r)) # Maximum difference in r of data points (to be used as length scale for GP kernel)
+        Rmin = min(np.diff(r)) # Minimum difference in r (used for upsampling the data)
 
         # Normalise velocities by Vmax = max(Vobs).
         Vmax = max(data["Vobs"])
@@ -377,6 +386,6 @@ if __name__ == "__main__":
         print("==================================")
         print("Analyzing galaxy "+g+" ("+str(i+1)+"/175)")
         print("==================================")
-        print("Rmax =", Rmax)
+        # print("Rmax =", Rmax)
 
         main(args, g, X, Y, X_test, bulged)
