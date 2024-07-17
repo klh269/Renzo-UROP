@@ -32,7 +32,7 @@ from numpyro.infer import (
 matplotlib.use("Agg")  # noqa: E402
 
 testing = False
-test_galaxy = "UGC03580"
+test_galaxy = "NGC5055"
 fileloc = "/mnt/users/koe/plots/gp_pchip/"
 progress_bar = False
 
@@ -48,17 +48,17 @@ def kernel(X, Z, var, length, noise, jitter=1.0e-6, include_noise=True):
 def model(X, Y):
     # set uninformative log-normal priors on our three kernel hyperparameters
     # if len(r) >= 20:
-    var = numpyro.sample("kernel_var", dist.LogNormal(0.0, 1.0))
-    noise = numpyro.sample("kernel_noise", dist.LogNormal(0.0, 1.0))
-    # length = numpyro.sample("kernel_length", dist.TruncatedNormal(Rmax/2, max(r)/10, low=0., high=Rmax*1.5))
+    var = numpyro.sample("var", dist.LogNormal(0.0, 1.0))
+    noise = numpyro.sample("noise", dist.LogNormal(0.0, 1.0))
+    # length = numpyro.sample("length", dist.TruncatedNormal(Rmax/2, max(r)/10, low=0., high=Rmax*1.5))
     # if len(r) >= 20:
-    #     length = numpyro.sample("kernel_length", dist.Uniform(0., Rmax*2))
+    #     length = numpyro.sample("length", dist.Uniform(0., Rmax*2))
     # else:
-    length = numpyro.sample("kernel_length", dist.Uniform(0., max(X)))
+    length = numpyro.sample("length", dist.Uniform(0., max(X)))
     # else:
-    # var2 = numpyro.sample("kernel_var2", dist.LogNormal(0.0, 10.0))
-    # noise2 = numpyro.sample("kernel_noise2", dist.LogNormal(0.0, 10.0))
-    # length2 = numpyro.sample("kernel_length2", dist.Normal(0.0, 10.0))
+    # var2 = numpyro.sample("var2", dist.LogNormal(0.0, 10.0))
+    # noise2 = numpyro.sample("noise2", dist.LogNormal(0.0, 10.0))
+    # length2 = numpyro.sample("length2", dist.Normal(0.0, 10.0))
 
     # compute kernel
     k = kernel(X, X, var, length, noise)
@@ -78,10 +78,10 @@ def run_inference(model, args, rng_key, X, Y):
     # demonstrate how to use different HMC initialization strategies
     if args.init_strategy == "value":
         init_strategy = init_to_value(
-            values={"kernel_var": 1.0, "kernel_noise": 0.05, "kernel_length": 0.5}
+            values={"var": 1.0, "noise": 0.05, "length": 0.5}
         )
     elif args.init_strategy == "median":
-        init_strategy = init_to_median(num_samples=1000)
+        init_strategy = init_to_median(num_samples=100)
     elif args.init_strategy == "feasible":
         init_strategy = init_to_feasible()
     elif args.init_strategy == "sample":
@@ -225,10 +225,10 @@ def main(args, g, X, Y, X_test, bulged):
 
             # do prediction
             vmap_args = (
-                random.split(rng_key_predict, samples["kernel_var"].shape[0]),
-                samples["kernel_var"],
-                samples["kernel_length"],
-                samples["kernel_noise"],
+                random.split(rng_key_predict, samples["var"].shape[0]),
+                samples["var"],
+                samples["length"],
+                samples["noise"],
             )
             means, predictions = vmap(
                 lambda rng_key, var, length, noise: predict(
@@ -239,7 +239,9 @@ def main(args, g, X, Y, X_test, bulged):
             mean_prediction.append(np.mean(means, axis=0))
             percentiles.append(np.percentile(predictions, [16.0, 84.0], axis=0))
 
-            fig = corner.corner(samples, show_titles=True, labels=["length", "noise", "var"], plot_datapoints=True, quantiles=[0.16, 0.5, 0.84], smooth=1)
+            labels = ["length", "var", "noise"]
+            samples_arr = np.vstack([samples[label] for label in labels]).T
+            fig = corner.corner(samples_arr, show_titles=True, labels=labels, title_fmt=".5f", quantiles=[0.16, 0.5, 0.84], smooth=1)
             fig.savefig(fileloc+"corner_"+v_list[i]+"/"+g+".png", dpi=300, bbox_inches="tight")
 
         """
@@ -281,7 +283,7 @@ def main(args, g, X, Y, X_test, bulged):
         plt.legend(bbox_to_anchor=(1,1), loc="upper left")
         plt.grid()
         
-        # Compute residuals of fits.
+        # Compute residuals of fits. Maybe change this to spline-prediction for smoother residual plots?
         res_Vobs = []
         res_Vbar = []
         for k in range(len(X)):
@@ -365,8 +367,9 @@ if __name__ == "__main__":
     
     # for i in tqdm(range(galaxy_count)):
     for i in range(galaxy_count):
-        # if i < 169:
-        #     continue
+        # Galaxies which fail to produce corner plots: DDO161 (7/175), F563-1 (15)
+        if i < 15:
+            continue
 
         g = table["Galaxy"][i]
 
