@@ -243,6 +243,7 @@ def main(args, g, X, Y, X_test, bulged):
             samples_arr = np.vstack([samples[label] for label in labels]).T
             fig = corner.corner(samples_arr, show_titles=True, labels=labels, title_fmt=".5f", quantiles=[0.16, 0.5, 0.84], smooth=1)
             fig.savefig(fileloc+"corner_"+v_list[i]+"/"+g+".png", dpi=300, bbox_inches="tight")
+            fig.close()
 
         """
         Make plots.
@@ -307,7 +308,8 @@ def main(args, g, X, Y, X_test, bulged):
 
 if __name__ == "__main__":
     assert numpyro.__version__.startswith("0.15.0")
-    parser = argparse.ArgumentParser(description="Gaussian Process example")
+    numpyro.enable_x64()
+    parser = argparse.ArgumentParser(description="Gaussian Process example") # To keep the inference from getting constant samples.
     parser.add_argument("-n", "--num-samples", nargs="?", default=1000, type=int)
     parser.add_argument("--num-warmup", nargs="?", default=1000, type=int)
     parser.add_argument("--num-chains", nargs="?", default=1, type=int)
@@ -367,9 +369,10 @@ if __name__ == "__main__":
     
     # for i in tqdm(range(galaxy_count)):
     for i in range(galaxy_count):
-        # Galaxies which fail to produce corner plots: DDO161 (7/175), F563-1 (15)
-        if i < 15:
-            continue
+        # Galaxies which fail to produce corner plots:
+        # DDO161 (7/175), F563-1 (15), F568-3 (21), F583-1 (28)
+        # if i < 6:
+        #     continue
 
         g = table["Galaxy"][i]
 
