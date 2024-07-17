@@ -15,7 +15,7 @@ import jax.numpy as jnp
 import jax.random as random
 
 import corner
-# from tqdm import tqdm
+from tqdm import tqdm
 
 import numpyro
 import numpyro.distributions as dist
@@ -31,9 +31,10 @@ from numpyro.infer import (
 
 matplotlib.use("Agg")  # noqa: E402
 
-testing = True
+testing = False
 test_galaxy = "UGC03580"
 fileloc = "/mnt/users/koe/plots/gp_pchip/"
+progress_bar = False
 
 # squared exponential kernel with diagonal noise term
 def kernel(X, Z, var, length, noise, jitter=1.0e-6, include_noise=True):
@@ -94,7 +95,7 @@ def run_inference(model, args, rng_key, X, Y):
         num_samples=args.num_samples,
         num_chains=args.num_chains,
         thinning=args.thinning,
-        progress_bar=False if "NUMPYRO_SPHINXBUILD" in os.environ else True,
+        progress_bar=progress_bar,
     )
     mcmc.run(rng_key, X, Y)
     mcmc.print_summary()
@@ -133,11 +134,80 @@ def main(args, g, X, Y, X_test, bulged):
         """
         Upsample the data using cubic Hermite spline fits.
         """
-        upsample_count = math.ceil(max(r)/Rmin + 1)
-        X_new = np.linspace(Rmin, Rmax, upsample_count)
+        max_count = math.ceil(max(r)/Rmin + 1)
+        upsample_count = min([max_count, 100])
+        X_new = np.linspace(min(X), max(X), upsample_count)
         Y_new = []
+        Y_d1 = []
+        Y_d2 = []
         for v_comp in Y:
             Y_new.append(interpolate.pchip_interpolate(X, v_comp, X_new))
+            Y_d1.append(interpolate.pchip_interpolate(X, v_comp, X_new, der=1))
+            Y_d2.append(interpolate.pchip_interpolate(X, v_comp, X_new, der=2))
+        
+        # plt.title("PCHIP: "+g)
+        # plt.xlabel(xlabel="Normalised radius "+r"($\times R_{eff}$)")
+        # plt.ylabel("Normalised velocities")
+
+        # plt.scatter(X, Y[0], color="k", alpha=0.3, label="Vobs") # Vobs
+        # plt.scatter(X, Y[1], color="red", alpha=0.3, label="Vbar") # Vbar
+        # plt.plot(X_new, Y_new[0], '--', color="k", label="Vobs_spline", alpha=0.5)
+        # plt.plot(X_new, Y_new[1], '--', color="red", label="Vbar_spline", alpha=0.5)
+
+        # plt.legend(bbox_to_anchor=(1,1), loc="upper left")
+        # plt.savefig(fileloc+"d0/"+g+".png", dpi=300, bbox_inches="tight")
+        # plt.close()
+
+        # # Plot first derivatives of the splines for Vobs and Vbar.
+        # fig1, ax1 = plt.subplots()
+        # ax1.set_title("First derivative: "+g)
+        
+        # color = "tab:red"
+        # ax1.set_xlabel(r"Normalised radius ($\times R_{eff}$)")
+        # ax1.set_ylabel(r'$dv_{bar}/dr$', color=color)
+    
+        # ln1 = ax1.plot(X_new, Y_d1[1], color=color, label="Vbar")
+        # ax1.tick_params(axis='y', labelcolor=color)
+        
+        # ax2 = ax1.twinx()
+        # color = "black"
+        # ax2.set_ylabel(r'$dv_{obs}/dr$', color=color)
+        # ln2 = ax2.plot(X_new, Y_d1[0], color=color, label="Vobs")
+        # ax2.tick_params(axis='y', labelcolor=color)
+        
+        # lns = ln1 + ln2
+        # labels = [l.get_label() for l in lns]
+    
+        # plt.legend(lns, labels) 
+        # fig1.tight_layout()
+        # fig1.savefig(fileloc+"d1/"+g+".png", dpi=300, bbox_inches="tight")
+        # plt.close()
+
+        # # Plot second derivatives of the splines for Vobs and Vbar.
+        # fig2, ax1 = plt.subplots()
+        # ax1.set_title("Second derivative: "+g)
+        
+        # color = "tab:red"
+        # ax1.set_xlabel(r"Normalised radius ($\times R_{eff}$)")
+        # ax1.set_ylabel(r'$d^2v_{bar}/dr^2$', color=color)
+    
+        # ln1 = ax1.plot(X_new, Y_d2[1], color=color, label="Vbar")
+        # ax1.tick_params(axis='y', labelcolor=color)
+        
+        # ax2 = ax1.twinx()
+        # color = "black"
+        # ax2.set_ylabel(r'$d^2v_{obs}/dr^2$', color=color)
+        # ln2 = ax2.plot(X_new, Y_d2[0], color=color, label="Vobs")
+        # ax2.tick_params(axis='y', labelcolor=color)
+        
+        # lns = ln1 + ln2
+        # labels = [l.get_label() for l in lns]
+    
+        # plt.legend(lns, labels) 
+        # fig2.tight_layout()
+        # fig2.savefig(fileloc+"d2/"+g+".png", dpi=300, bbox_inches="tight")
+        # plt.close()
+
 
         """
         Do inference for each velocity compenent separately.
@@ -151,7 +221,7 @@ def main(args, g, X, Y, X_test, bulged):
             
             print("Fitting function to " + v_list[i])
             rng_key, rng_key_predict = random.split(random.PRNGKey(0))
-            samples = run_inference(model, args, rng_key, X_new, Y_new[i])
+            samples = run_inference(model, args, rng_key, X_new, np.array(Y_new[i]))
 
             # do prediction
             vmap_args = (
@@ -162,7 +232,7 @@ def main(args, g, X, Y, X_test, bulged):
             )
             means, predictions = vmap(
                 lambda rng_key, var, length, noise: predict(
-                    rng_key, X_new, Y_new[i], X_test, var, length, noise, use_cholesky=args.use_cholesky
+                    rng_key, X_new, np.array(Y_new[i]), X_test, var, length, noise, use_cholesky=args.use_cholesky
                 )
             )(*vmap_args)
 
@@ -170,13 +240,13 @@ def main(args, g, X, Y, X_test, bulged):
             percentiles.append(np.percentile(predictions, [16.0, 84.0], axis=0))
 
             fig = corner.corner(samples, show_titles=True, labels=["length", "noise", "var"], plot_datapoints=True, quantiles=[0.16, 0.5, 0.84], smooth=1)
-            fig.savefig(fileloc+g+"_corner_"+v_list[i]+".png", dpi=300, bbox_inches="tight")
+            fig.savefig(fileloc+"corner_"+v_list[i]+"/"+g+".png", dpi=300, bbox_inches="tight")
 
         """
         Make plots.
         """
         fig0 = plt.figure(1)
-        frame1 = fig0.add_axes((.1,.3,.3,.6))
+        frame1 = fig0.add_axes((.1,.3,.8,.6))
         plt.title("Gaussian process: "+g)
         # plt.xlabel(xlabel="Normalised radius "+r"($\times R_{eff}$)")
         plt.ylabel("Normalised velocities")
@@ -219,13 +289,13 @@ def main(args, g, X, Y, X_test, bulged):
             res_Vobs.append(Y[0][k] - mean_prediction[0][idx])
             res_Vbar.append(Y[1][k] - mean_prediction[1][idx])
 
-        frame2 = fig0.add_axes((.1,.1,.3,.2))
+        frame2 = fig0.add_axes((.1,.1,.8,.2))
         plt.xlabel(r'Normalised radius ($\times R_{eff}$)')
         plt.ylabel("Residuals")
         plt.scatter(r, res_Vobs, color='k', alpha=0.3, label="Vobs")
         plt.scatter(r, res_Vbar, color='red', alpha=0.3, label="Vbar")
-        # plt.scatter(r, res_Vgas, color='green', alpha=0.3)
-        # plt.scatter(r, res_Vdisk, color='blue', alpha=0.3)
+        plt.plot(r, res_Vobs, color='k', alpha=0.5)
+        plt.plot(r, res_Vbar, color='red', alpha=0.5)
         plt.legend(bbox_to_anchor=(1,1), loc="upper left")
         plt.grid()
 
@@ -293,6 +363,7 @@ if __name__ == "__main__":
     bulged_corr2 = []
     xbulge_corr2 = []
     
+    # for i in tqdm(range(galaxy_count)):
     for i in range(galaxy_count):
         # if i < 169:
         #     continue
