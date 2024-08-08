@@ -1,5 +1,7 @@
 #!/usr/bin/env python
 """
+MOND: Generate Vobs curve from Vbar using Milgrom's law.
+
 Interpolates data with piecewise cubic Hermite spline (PCHIP),
 filters noise (of length scale < 0.2*Reff) with SG filter, and
 correlates the splines, 1st and 2nd derivatives of Vobs vs Vbar.
@@ -33,7 +35,7 @@ columns = [ "Rad", "Vobs", "errV", "Vgas",
 G = 4.300e-6    # Gravitational constant G (kpc (km/s)^2 solarM^(-1))
 pdisk = 0.5
 pbul = 0.7
-a0 = 1.2e-10 / 3.24e-14 # Scale acceleration for MOND
+a0 = 1.2e-10 / 3.24e-14 # Scale acceleration for MOND in pc/yr^2
 
 def Vbar(arr):
     v = np.sqrt( arr["Vgas"]**2
