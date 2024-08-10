@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 """
-NOTE: Use 48GB RAM (-n 48) when queueing or job might get stopped.
+NOTE: Use 36GB RAM (-n 36) when queueing or job might get stopped.
 
 Gaussian process + dynamic time warping analysis,
 combining all SPARC data with MOND and LCDM mock data.
@@ -359,8 +359,8 @@ if __name__ == "__main__":
     assert numpyro.__version__.startswith("0.15.0")
     numpyro.enable_x64()
     parser = argparse.ArgumentParser(description="Gaussian Process example") # To keep the inference from getting constant samples.
-    parser.add_argument("-n", "--num-samples", nargs="?", default=3000, type=int)
-    parser.add_argument("--num-warmup", nargs="?", default=2000, type=int)
+    parser.add_argument("-n", "--num-samples", nargs="?", default=1000, type=int)
+    parser.add_argument("--num-warmup", nargs="?", default=1000, type=int)
     parser.add_argument("--num-chains", nargs="?", default=1, type=int)
     parser.add_argument("--thinning", nargs="?", default=2, type=int)
     parser.add_argument("--num-data", nargs="?", default=25, type=int)
