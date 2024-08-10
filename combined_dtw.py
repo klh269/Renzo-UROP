@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 """
-NOTE: Use 30GB RAM (-n 30) when queueing or job might get stopped.
+NOTE: Use 48GB RAM (-n 48) when queueing or job might get stopped.
 
 Gaussian process + dynamic time warping analysis,
 combining all SPARC data with MOND and LCDM mock data.
@@ -225,7 +225,7 @@ def main(args, g, X, Y, X_test, bulged):
     samples_arr = np.vstack([samples[label] for label in labels]).T
     fig = corner.corner(samples_arr, show_titles=True, labels=labels, title_fmt=".3f", quantiles=[0.16, 0.5, 0.84], smooth=1)
     fig.savefig(fileloc+"corner_plots/"+corner_dir[0]+g+".png", dpi=300, bbox_inches="tight")
-    plt.close()
+    plt.close(fig)
 
     # GP on Vobs with fixed lengthscale from Vbar.
     ls = np.median(samples["length"])
@@ -251,9 +251,9 @@ def main(args, g, X, Y, X_test, bulged):
 
         labels = ["var", "noise"]
         samples_arr = np.vstack([samples[label] for label in labels]).T
-        fig = corner.corner(samples_arr, show_titles=True, labels=labels, title_fmt=".3f", quantiles=[0.16, 0.5, 0.84], smooth=1)
+        fig = corner.corner(samples_arr, show_titles=True, labels=labels, title_fmt=".5f", quantiles=[0.16, 0.5, 0.84], smooth=1)
         fig.savefig(fileloc+"corner_plots/"+corner_dir[j]+g+".png", dpi=300, bbox_inches="tight")
-        plt.close()
+        plt.close(fig)
 
 
     """
@@ -298,7 +298,7 @@ def main(args, g, X, Y, X_test, bulged):
     plt.grid()
 
     fig0.savefig(fileloc+g+".png", dpi=300, bbox_inches="tight")
-    plt.close()
+    plt.close(fig0)
 
 
     """
@@ -326,7 +326,6 @@ def main(args, g, X, Y, X_test, bulged):
 
         # Plot distance matrix and cost matrix with optimal path.
         plt.title("Dynamic time warping: "+g)
-        plt.figure(figsize=(6, 4))
         plt.subplot(121)
         plt.title("Distance matrix")
         plt.imshow(dist_mats[j], cmap=plt.cm.binary, interpolation="nearest", origin="lower")
@@ -340,7 +339,6 @@ def main(args, g, X, Y, X_test, bulged):
         plt.close()
 
         # Visualize DTW alignment.
-        plt.figure()
         plt.title("DTW alignment: "+g)
 
         diff = abs(max(res_Vbar) - min(residuals[j+1]))
@@ -361,8 +359,8 @@ if __name__ == "__main__":
     assert numpyro.__version__.startswith("0.15.0")
     numpyro.enable_x64()
     parser = argparse.ArgumentParser(description="Gaussian Process example") # To keep the inference from getting constant samples.
-    parser.add_argument("-n", "--num-samples", nargs="?", default=1000, type=int)
-    parser.add_argument("--num-warmup", nargs="?", default=1000, type=int)
+    parser.add_argument("-n", "--num-samples", nargs="?", default=3000, type=int)
+    parser.add_argument("--num-warmup", nargs="?", default=2000, type=int)
     parser.add_argument("--num-chains", nargs="?", default=1, type=int)
     parser.add_argument("--thinning", nargs="?", default=2, type=int)
     parser.add_argument("--num-data", nargs="?", default=25, type=int)
@@ -405,11 +403,12 @@ if __name__ == "__main__":
         return v
     
     def MOND_Vobs(arr, a0=a0):
-        # Quadratic solution from MOND standard interpolating function.
+        # Quadratic solution from MOND simple interpolating function.
         acc = Vbar(arr)**2 / r
-        v4 = (acc * r)**2 + np.sqrt((acc * r)**4 + 4*(acc * a0 * r**2)**2)
-        v4 /= 2
-        return v4**0.25
+        y = acc / a0
+        nu = 1 + np.sqrt((1 + 4/y))
+        nu /= 2
+        return np.sqrt(acc * nu * r)
 
     galaxy_count = len(table["Galaxy"])
     skips = 0
