@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 """
-NOTE: Use 36GB RAM (-n 36) when queueing or job might get stopped.
+NOTE: Use 64GB RAM (-m 64) when queueing or job might get stopped.
 
 Gaussian process + dynamic time warping analysis,
 combining all SPARC data with MOND and LCDM mock data.
@@ -20,7 +20,7 @@ import time
 import matplotlib
 import matplotlib.pyplot as plt
 import numpy as np
-from scipy import signal, interpolate
+from scipy import signal, interpolate, stats
 import math
 
 import jax
@@ -46,10 +46,7 @@ from numpyro.infer import (
 matplotlib.use("Agg")  # noqa: E402
 
 
-testing = False # Runs only one galaxy (test_galaxy)
-test_galaxy = "NGC2403"
-progress_bar = testing # Progress bar for each MCMC.
-
+testing = False # Loops over only the first handful of galaxies.
 fileloc = "/mnt/users/koe/plots/combined_dtw/"
 
 
@@ -107,7 +104,7 @@ def run_inference(model, args, rng_key, X, Y, ls=0):
         num_samples=args.num_samples,
         num_chains=args.num_chains,
         thinning=args.thinning,
-        progress_bar=progress_bar,
+        progress_bar=testing,
     )
     mcmc.run(rng_key, X, Y, ls)
     mcmc.print_summary()
@@ -196,6 +193,7 @@ def main(args, g, X, Y, X_test, bulged):
     then apply the resulted lengthscale to Vobs (both real and mock data).
     """
     v_comps = [ "Vbar (SPARC)", "Vobs (SPARC)", "Vobs (MOND)", "Vobs (LCDM)" ]
+    colours = [ 'tab:red', 'k', 'mediumblue', 'tab:green' ]
     corner_dir = [ "Vbar/", "Vobs_data/", "Vobs_MOND/", "Vobs_LCDM/" ]
     mean_prediction = []
     percentiles = []
@@ -229,7 +227,7 @@ def main(args, g, X, Y, X_test, bulged):
 
     # GP on Vobs with fixed lengthscale from Vbar.
     ls = np.median(samples["length"])
-    for j in range(1, 3):
+    for j in range(1, 4):
         print("\nFitting function to " + v_comps[j] + " with length = " + str(round(ls, 2)) + "...")
         rng_key, rng_key_predict = random.split(random.PRNGKey(0))
         samples = run_inference(model, args, rng_key, X, Y[j], ls=ls)
@@ -254,28 +252,11 @@ def main(args, g, X, Y, X_test, bulged):
         fig = corner.corner(samples_arr, show_titles=True, labels=labels, title_fmt=".5f", quantiles=[0.16, 0.5, 0.84], smooth=1)
         fig.savefig(fileloc+"corner_plots/"+corner_dir[j]+g+".png", dpi=300, bbox_inches="tight")
         plt.close(fig)
-
-
-    """
-    Make plots.
-    """
-    colours = [ 'tab:red', 'k', 'mediumblue', 'tab:green' ]
-    fig0 = plt.figure(1)
-    frame1 = fig0.add_axes((.1,.3,.8,.6))
-    plt.title("Gaussian process: "+g)
-    plt.ylabel("Normalised velocities")
-
-    for j in range(3):
-        # Scatter plot for data/mock data points.
-        plt.scatter(X, Y[j], color=colours[j], alpha=0.3)
-        # Plot mean prediction from GP.
-        plt.plot(X_test, mean_prediction[j], color=colours[j], label=v_comps[j])
-        # Fill in 1-sigma (68%) confidence band of GP fit.
-        plt.fill_between(X_test, percentiles[j][0, :], percentiles[j][1, :], color=colours[j], alpha=0.2)
-
-    plt.legend(bbox_to_anchor=(1,1), loc="upper left")
-    plt.grid()
     
+
+    """
+    DTW on GP residuals.
+    """
     # Compute residuals of fits.
     res_Vbar, res_Vobs, res_MOND, res_LCDM = [], [] ,[], []
     for k in range(len(X)):
@@ -283,46 +264,29 @@ def main(args, g, X, Y, X_test, bulged):
         res_Vbar.append(Y[0][k] - mean_prediction[0][idx])
         res_Vobs.append(Y[1][k] - mean_prediction[1][idx])
         res_MOND.append(Y[2][k] - mean_prediction[2][idx])
-        # res_LCDM.append(Y[3][k] - mean_prediction[3][idx])
-    residuals = np.array([ res_Vbar, res_Vobs, res_MOND ])
+        res_LCDM.append(Y[3][k] - mean_prediction[3][idx])
+    residuals = np.array([ res_Vbar, res_Vobs, res_MOND, res_LCDM ])
 
-    frame2 = fig0.add_axes((.1,.1,.8,.2))
-    plt.xlabel(r'Normalised radius ($\times R_{eff}$)')
-    plt.ylabel("Residuals")
-
-    for j in range(3):
-        plt.scatter(r, residuals[j], color=colours[j], alpha=0.3, label=v_comps[j])
-        plt.plot(r, residuals[j], color=colours[j], alpha=0.3)
-
-    plt.legend(bbox_to_anchor=(1,1), loc="upper left")
-    plt.grid()
-
-    fig0.savefig(fileloc+g+".png", dpi=300, bbox_inches="tight")
-    plt.close(fig0)
-
-
-    """
-    DTW for residuals.
-    """
     # Construct distance matrices.
     dist_data = np.zeros((len(r), len(r)))
     dist_MOND = np.copy(dist_data)
-    # dist_LCDM = np.copy(dist_data)
+    dist_LCDM = np.copy(dist_data)
     for n in range(len(r)):
         for m in range(len(r)):
             dist_data[n, m] = abs(res_Vobs[n] - res_Vbar[m])
             dist_MOND[n, m] = abs(res_MOND[n] - res_Vbar[m])
-            # dist_LCDM[n, m] = abs(res_LCDM[n] - res_Vbar[m])
+            dist_LCDM[n, m] = abs(res_LCDM[n] - res_Vbar[m])
     
-    dist_mats = np.array([ dist_data, dist_MOND ])
+    dist_mats = np.array([ dist_data, dist_MOND, dist_LCDM ])
     mats_dir = [ "data/", "MOND/", "LCDM/" ]
     
     # DTW!
-    for j in range(2):
+    for j in range(3):
         path, cost_mat = dp(dist_mats[j])
         x_path, y_path = zip(*path)
         cost = cost_mat[ len(r)-1, len(r)-1 ]
-        dtw_cost.append(cost)
+        dtw_cost[j].append(cost)
+        norm_cost[j].append(cost / (2 * len(X)))
 
         # Plot distance matrix and cost matrix with optimal path.
         plt.title("Dynamic time warping: "+g)
@@ -353,6 +317,336 @@ def main(args, g, X, Y, X_test, bulged):
         plt.legend(bbox_to_anchor=(1,1))
         plt.savefig(fileloc+"dtw/vis_"+mats_dir[j]+g+".png", dpi=300, bbox_inches="tight")
         plt.close()
+    
+    """
+    Code for PCHIP + SG filter on GP residuals.
+    """
+    # Interpolate the residuals with cubic Hermite spline splines.
+    v_d0, v_d1, v_d2 = [], [], []
+    for v_comp in residuals:
+        v_d0.append(interpolate.pchip_interpolate(r, v_comp, X_test))
+        v_d1.append(interpolate.pchip_interpolate(r, v_comp, X_test, der=1))
+        v_d2.append(interpolate.pchip_interpolate(r, v_comp, X_test, der=2))
+
+    # # Apply SG filter to interpolated residuals with window size = 0.2*Reff and extract first and second derivatives.
+    # d0_sg, d1_sg, d2_sg = [], [], []
+    # for v_comp0 in v_d0:
+    #     d0_sg.append(signal.savgol_filter(v_comp0, 50, 2))
+    # for v_comp1 in v_d1:
+    #     d1_sg.append(signal.savgol_filter(v_comp1, 50, 2))
+    # for v_comp2 in v_d2:
+    #     d2_sg.append(signal.savgol_filter(v_comp2, 50, 2))
+    
+    res_sg = [ v_d0, v_d1, v_d2 ]
+
+    # Correlate Vobs and Vbar (d0, d1, d2) as a function of (maximum) radius, i.e. spheres of increasing r.
+    # correlations_r = rad_corr arrays with [ data, MOND, LCDM ], so 3 Vobs x 3 derivatives x 2 correlations each,
+    # where rad_corr = [ [Spearman d0, Pearson d0], [S d1, P d1], [S d2, P d2] ].
+    correlations_r = []
+    for i in range(1, 4):
+        rad_corr = [ [[], []], [[], []], [[], []] ]
+        for k in range(3):
+            for j in range(10, len(X_test)):
+                rad_corr[k][0].append(stats.spearmanr(res_sg[k][0][:j], res_sg[k][i][:j])[0])
+                rad_corr[k][1].append(stats.pearsonr(res_sg[k][0][:j], res_sg[k][i][:j])[0])
+        correlations_r.append(rad_corr)
+    
+    # # Correlate Vobs and Vbar in windows of length 1*Reff.
+    # ws_d0, ws_d1, ws_d2 = [], [], []
+    # wp_d0, wp_d1, wp_d2 = [], [], []
+    # wmax = len(X_test) - 50
+
+    # if len(X_test) > 100:
+    #     for j in range(50, wmax):
+    #         jmin, jmax = j-50, j+50
+    #         # Spearman rho.
+    #         ws_d0.append(stats.spearmanr(d0_sg[0][jmin:jmax], d0_sg[1][jmin:jmax])[0])
+    #         ws_d1.append(stats.spearmanr(d1_sg[0][jmin:jmax], d1_sg[1][jmin:jmax])[0])
+    #         ws_d2.append(stats.spearmanr(d2_sg[0][jmin:jmax], d2_sg[1][jmin:jmax])[0])
+    #         # Pearson rho.
+    #         wp_d0.append(stats.pearsonr(d0_sg[0][jmin:jmax], d0_sg[1][jmin:jmax])[0])
+    #         wp_d1.append(stats.pearsonr(d1_sg[0][jmin:jmax], d1_sg[1][jmin:jmax])[0])
+    #         wp_d2.append(stats.pearsonr(d2_sg[0][jmin:jmax], d2_sg[1][jmin:jmax])[0])
+
+    # # Compute average baryonic dominance in windows of length 1 * Reff.
+    # wbar_ratio = []
+    # if len(X_test) > 100:
+    #     for j in range(50, wmax):
+    #         wbar_ratio.append(sum(v_d0[1][j-50:j+50]/v_d0[0][j-50:j+50]) / 101)
+
+    """
+    Plot GP fits with residuals (including PCHIP + SG filters).
+    """
+    fig0 = plt.figure(1)
+    frame1 = fig0.add_axes((.1,.3,.8,.6))
+    plt.title("Gaussian process: "+g)
+    # plt.ylabel("Normalised velocities")
+    plt.ylabel("Velocities (km/s)")
+
+    for j in range(4):
+        # Scatter plot for data/mock data points.
+        plt.scatter(X, Y[j], color=colours[j], alpha=0.3)
+        # Plot mean prediction from GP.
+        plt.plot(X_test, mean_prediction[j], color=colours[j], label=v_comps[j])
+        # Fill in 1-sigma (68%) confidence band of GP fit.
+        plt.fill_between(X_test, percentiles[j][0, :], percentiles[j][1, :], color=colours[j], alpha=0.2)
+
+    plt.legend(bbox_to_anchor=(1,1), loc="upper left")
+    plt.grid()
+
+    frame2 = fig0.add_axes((.1,.1,.8,.2))
+    plt.xlabel(r'Normalised radius ($\times R_{eff}$)')
+    plt.ylabel("Residuals")
+
+    for j in range(4):
+        plt.scatter(r, residuals[j], color=colours[j], alpha=0.3, label=v_comps[j])
+        plt.plot(X_test, v_d0[j], color=colours[j], alpha=0.3)
+
+    plt.legend(bbox_to_anchor=(1,1), loc="upper left")
+    plt.grid()
+
+    fig0.savefig(fileloc+g+".png", dpi=300, bbox_inches="tight")
+    plt.close(fig0)
+
+
+    """
+    ---------------------------------------------------
+    Correlation plots using sphers of increasing radius
+    ---------------------------------------------------
+    """
+
+    """
+    Plot the residual splines and 1st + 2nd derivatives for Vbar and all Vobs,
+    and their Spearman/Pearson correlation alongside the galaxy's (average) baryonic ratio.
+    """
+    deriv_dir = [ "d0/", "d1/", "d2/" ]
+    correlations = [ [], [], [] ]   # correlations = list of component lists: [ [S d0, P d0], [S d1, P d1], [S d2, P d2] ].
+
+    # Plot corrletaions as 1 main plot + 3 subplots, each with a different corresponding Vbar/Vobs.
+    for der in range(3):
+        fig0, ((ax1, ax2), (ax3, ax4)) = plt.subplots(2, 2, sharex=True)
+        fig0.set_size_inches(18.5, 10.5)
+        axes = [ ax2, ax3, ax4 ]
+        ax1.set_title("Residuals correlation: "+g)
+        # ax1.set_ylabel("Normalised velocities")
+        ax1.set_ylabel("Velocities (km/s)")
+        color_bar = "orange"
+
+        for j in range(4):
+            ax1.scatter(r, residuals[j], color=colours[j], alpha=0.3)
+            ax1.plot(X_test, res_sg[der][j], color=colours[j], label=v_comps[j])
+        ax1.legend(bbox_to_anchor=(1.35,1))
+
+        for j in range(3):
+            # Compute baryonic dominance, i.e. average Vbar/Vobs from centre to some max radius.
+            bar_ratio = []
+            for rd in range(len(X_test)):
+                bar_ratio.append(sum(mean_prediction[0][:rd]/mean_prediction[j+1][:rd]) / (rd+1))
+
+            # Compute correlation between rs or rp and the baryonic ratio, using rs for rs-bar and rp for rp-bar.
+            correlations_comp = []
+            correlations_comp.append(stats.spearmanr(correlations_r[j][der][0], bar_ratio[10:])[0])
+            correlations_comp.append(stats.pearsonr(correlations_r[j][der][1], bar_ratio[10:])[0])
+            correlations[der].append(correlations_comp)
+
+            # Plot correlations and Vbar/Vobs.
+            if j > 0:
+                axes[j].set_xlabel(r'Normalised radius ($\times R_{eff}$)')
+            axes[j].set_ylabel("Correlation: "+v_comps[j+1])
+            axes[j].plot(X_test[10:], correlations_r[j][der][0], color=colours[j+1], label=r"Spearman $\rho$")
+            axes[j].plot(X_test[10:], correlations_r[j][der][1], ':', color=colours[j+1], label=r"Pearson $\rho$")
+            axes[j].tick_params(axis='y', labelcolor=colours[j+1])
+
+            ax5 = axes[j].twinx()
+            ax5.set_ylabel(r'Average $v_{bar}/v_{obs}$')
+            ax5.plot(X_test[10:], bar_ratio[10:], '--', color=color_bar, label="Vbar/Vobs")
+            ax5.tick_params(axis='y', labelcolor=color_bar)
+
+            axes[j].plot([], [], ' ', label=r"$\rho_s=$"+str(round(correlations_comp[0], 3))+r", $\rho_p=$"+str(round(correlations_comp[1], 3)))
+            axes[j].legend(bbox_to_anchor=(1.5, 1))
+
+        plt.subplots_adjust(hspace=0.05, wspace=0.6)
+        fig0.savefig(fileloc+"corr_subplots/"+deriv_dir[der]+g+".png", dpi=300, bbox_inches="tight")
+        plt.close()
+
+    correlations_ALL.append(correlations)
+
+    # Plot corrletaions as 1 main plot + 1 subplot, using only Vobs from data for Vbar/Vobs.
+    for der in range(3):
+        fig1, (ax1, ax2) = plt.subplots(2, 1, sharex=True)
+        ax1.set_title("Residuals correlation: "+g)
+        # ax1.set_ylabel("Normalised velocities")
+        ax1.set_ylabel("Velocities (km/s)")
+        color_bar = "orange"
+
+        # Compute baryonic dominance, i.e. average Vbar/Vobs from centre to some max radius.
+        bar_ratio = []
+        for rd in range(len(X_test)):
+            bar_ratio.append(sum(mean_prediction[0][:rd]/mean_prediction[1][:rd]) / (rd+1))
+
+        for j in range(4):
+            ax1.scatter(r, residuals[j], color=colours[j], alpha=0.3)
+            ax1.plot(X_test, res_sg[der][j], color=colours[j], label=v_comps[j])
+        ax1.legend(bbox_to_anchor=(1.35, 1))
+
+        ax2.set_xlabel(r'Normalised radius ($\times R_{eff}$)')
+        ax2.set_ylabel("Correlations")
+        
+        vel_comps = [ "Data", "MOND", r"$\Lambda$CDM" ]
+
+        for j in range(3):
+            # Plot correlations and Vbar/Vobs.
+            ax2.plot(X_test[10:], correlations_r[j][der][0], color=colours[j+1], label=vel_comps[j]+r": Spearman $\rho$")
+            ax2.plot(X_test[10:], correlations_r[j][der][1], ':', color=colours[j+1], label=vel_comps[j]+r": Pearson $\rho$")
+            # ax2.plot([], [], ' ', label=vel_comps[j]+r": $\rho_s=$"+str(round(correlations[j][der][0], 3))+r", $\rho_p=$"+str(round(correlations[j][der][1], 3)))
+            ax2.plot([], [], ' ', label=vel_comps[j]+r": $\rho_s=$"+str(round(stats.spearmanr(correlations_r[j][der][0], bar_ratio[10:])[0], 3))+r", $\rho_p=$"+str(round(stats.pearsonr(correlations_r[j][der][1], bar_ratio[10:])[0], 3)))
+
+        ax5 = ax2.twinx()
+        ax5.set_ylabel(r'Average $v_{bar}/v_{obs}$')
+        ax5.plot(X_test[10:], bar_ratio[10:], '--', color=color_bar, label="Vbar/Vobs")
+        ax5.tick_params(axis='y', labelcolor=color_bar)
+        
+        ax2.legend(bbox_to_anchor=(1.7, 1.1))
+        plt.subplots_adjust(hspace=0.05)
+        fig1.savefig(fileloc+"correlations/"+deriv_dir[der]+g+".png", dpi=300, bbox_inches="tight")
+        plt.close()
+
+
+    # """
+    # ---------------------------------------------------
+    # Correlation plots using windows of length 1 * Reff.
+    # ---------------------------------------------------
+    # """
+    # if len(X_test) > 100:
+    #     """
+    #     Plot the spline fits for Vobs and Vbar (top plot),
+    #     and their Spearman correlation alongside the galaxy's (average) baryonic ratio (bottom plot).
+    #     """
+    #     fig0, (ax1, ax3) = plt.subplots(2, 1, sharex=True)
+    #     ax1.set_title("PCHIP + SG filter: "+g)
+    #     # ax1.set_ylabel("Normalised velocities")
+    #     ax1.set_ylabel("Velocities (km/s)")
+
+    #     ax1.scatter(r, v_components[0], color="k", alpha=0.3)
+    #     ln1 = ax1.plot(X_test, d0_sg[0], color="k", label="Vobs")
+    #     ax1.scatter(r, v_components[1], color="red", alpha=0.3)
+    #     ln2 = ax1.plot(X_test, d0_sg[1], color="red", label="Vbar")
+        
+    #     lns = ln1 + ln2
+    #     labels = [l.get_label() for l in lns]
+    #     ax1.legend(lns, labels, bbox_to_anchor=(1.35,1))
+
+    #     color = "tab:blue"
+    #     ax3.set_xlabel(r'Normalised radius ($\times R_{eff}$)')
+    #     ax3.set_ylabel("Correlation")
+    #     ln3 = ax3.plot(X_test[50:wmax], ws_d0, color=color, label=r"Spearman $\rho$")
+    #     ln4 = ax3.plot(X_test[50:wmax], wp_d0, ':', color=color, label=r"Pearson $\rho$")
+    #     ax3.tick_params(axis='y', labelcolor=color)
+
+    #     ax4 = ax3.twinx()
+    #     color = "orange"
+    #     ax4.set_ylabel(r'Average $v_{bar}/v_{obs}$')
+    #     ln5 = ax4.plot(X_test[50:wmax], wbar_ratio, '--', color=color, label="Vbar/Vobs")
+    #     ax4.tick_params(axis='y', labelcolor=color)
+
+    #     ln6 = ax4.plot([], [], ' ', label=r"$\rho_s=$"+str(round(scorr_d0, 3))+r", $\rho_p=$"+str(round(pcorr_d0, 3)))
+    #     lns = ln3 + ln4 + ln5 + ln6
+    #     labels = [l.get_label() for l in lns]
+    #     ax3.legend(lns, labels, bbox_to_anchor=(1.57,1))
+
+    #     plt.subplots_adjust(hspace=0.05)
+    #     fig0.savefig(fileloc+"window/d0/"+g+".png", dpi=300, bbox_inches="tight")
+    #     plt.close()
+
+    #     """
+    #     Plot first derivatives of the splines for Vobs and Vbar (top plot),
+    #     and their Spearman correlation alongside the galaxy's (average) baryonic ratio (bottom plot).
+    #     """
+    #     fig1, (ax1, ax3) = plt.subplots(2, 1, sharex=True)
+    #     ax1.set_title("First derivative: "+g)
+        
+    #     color = "tab:red"
+    #     ax1.set_ylabel(r'$dv_{bar}/dr$', color=color)
+
+    #     ln1 = ax1.plot(X_test, d1_sg[1], color=color, label="Vbar")
+    #     ax1.tick_params(axis='y', labelcolor=color)
+        
+    #     ax2 = ax1.twinx()
+    #     color = "black"
+    #     ax2.set_ylabel(r'$dv_{obs}/dr$', color=color)
+    #     ln2 = ax2.plot(X_test, d1_sg[0], color=color, label="Vobs")
+    #     ax2.tick_params(axis='y', labelcolor=color)
+        
+    #     lns = ln1 + ln2
+    #     labels = [l.get_label() for l in lns]
+    #     ax1.legend(lns, labels, bbox_to_anchor=(1.35,1))
+
+    #     color = "tab:blue"
+    #     ax3.set_xlabel(r'Normalised radius ($\times R_{eff}$)')
+    #     ax3.set_ylabel("Correlation")
+    #     ln3 = ax3.plot(X_test[50:wmax], ws_d1, color=color, label=r"Spearman $\rho$")
+    #     ln4 = ax3.plot(X_test[50:wmax], wp_d1, ':', color=color, label=r"Pearson $\rho$")
+    #     ax3.tick_params(axis='y', labelcolor=color)
+
+    #     ax4 = ax3.twinx()
+    #     color = "orange"
+    #     ax4.set_ylabel(r'Average $v_{bar}/v_{obs}$')
+    #     ln5 = ax4.plot(X_test[50:wmax], wbar_ratio, '--', color=color, label="Vbar/Vobs")
+    #     ax4.tick_params(axis='y', labelcolor=color)
+
+    #     ln6 = ax4.plot([], [], ' ', label=r"$\rho_s=$"+str(round(scorr_d1, 3))+r", $\rho_p=$"+str(round(pcorr_d1, 3)))
+    #     lns = ln3 + ln4 + ln5 + ln6
+    #     labels = [l.get_label() for l in lns]
+    #     ax3.legend(lns, labels, bbox_to_anchor=(1.57,1))
+
+    #     plt.subplots_adjust(hspace=0.05)
+    #     fig1.savefig(fileloc+"window/d1/"+g+".png", dpi=300, bbox_inches="tight")
+    #     plt.close()
+
+    #     """
+    #     Plot second derivatives of splines for Vobs and Vbar (top plot),
+    #     and their Spearman correlation alongside the galaxy's (average) baryonic ratio (bottom plot).
+    #     """
+    #     fig2, (ax1, ax3) = plt.subplots(2, 1, sharex=True)
+    #     ax1.set_title("Second derivative: "+g)
+        
+    #     color = "tab:red"
+    #     ax1.set_ylabel(r'$d^2v_{bar}/dr^2$', color=color)
+
+    #     ln1 = ax1.plot(X_test, d2_sg[1], color=color, label="Vbar")
+    #     ax1.tick_params(axis='y', labelcolor=color)
+        
+    #     ax2 = ax1.twinx()
+    #     color = "black"
+    #     ax2.set_ylabel(r'$d^2v_{obs}/dr^2$', color=color)
+    #     ln2 = ax2.plot(X_test, d2_sg[0], color=color, label="Vobs")
+    #     ax2.tick_params(axis='y', labelcolor=color)
+        
+    #     lns = ln1 + ln2
+    #     labels = [l.get_label() for l in lns]
+    #     ax1.legend(lns, labels, bbox_to_anchor=(1.35,1))
+
+    #     color = "tab:blue"
+    #     ax3.set_xlabel(r'Normalised radius ($\times R_{eff}$)')
+    #     ax3.set_ylabel("Correlation")
+    #     ln3 = ax3.plot(X_test[50:wmax], ws_d2, color=color, label=r"Spearman $\rho$")
+    #     ln4 = ax3.plot(X_test[50:wmax], wp_d2, ':', color=color, label=r"Pearson $\rho$")
+    #     ax3.tick_params(axis='y', labelcolor=color)
+
+    #     ax4 = ax3.twinx()
+    #     color = "orange"
+    #     ax4.set_ylabel(r'Average $v_{bar}/v_{obs}$')
+    #     ln5 = ax4.plot(X_test[50:wmax], wbar_ratio, '--', color=color, label="Vbar/Vobs")
+    #     ax4.tick_params(axis='y', labelcolor=color)
+
+    #     ln6 = ax4.plot([], [], ' ', label=r"$\rho_s=$"+str(round(scorr_d2, 3))+r", $\rho_p=$"+str(round(pcorr_d2, 3)))
+    #     lns = ln3 + ln4 + ln5 + ln6
+    #     labels = [l.get_label() for l in lns]
+    #     ax3.legend(lns, labels, bbox_to_anchor=(1.57,1))
+
+    #     plt.subplots_adjust(hspace=0.05)
+    #     fig2.savefig(fileloc+"window/d2/"+g+".png", dpi=300, bbox_inches="tight")
+    #     plt.close()
 
 
 if __name__ == "__main__":
@@ -380,6 +674,18 @@ if __name__ == "__main__":
 
     # Get galaxy data from table1.
     file = "/mnt/users/koe/SPARC_Lelli2016c.mrt.txt"
+    
+    # Get v_DM from Fedir's LCDM abundance matching (V_LCDM.txt).
+    DMtable_str = []
+    v_DM = []
+    with open('/mnt/users/koe/V_LCDM.txt') as f_DM:
+        list_DM = f_DM.read().splitlines()
+        for line in list_DM:
+            DMtable_str.append(line.split(", "))
+
+    for line in DMtable_str:
+        del line[0]
+        v_DM.append([float(num) for num in line])
 
     SPARC_c = [ "Galaxy", "T", "D", "e_D", "f_D", "Inc",
             "e_Inc", "L", "e_L", "Reff", "SBeff", "Rdisk",
@@ -413,19 +719,20 @@ if __name__ == "__main__":
     galaxy_count = len(table["Galaxy"])
     skips = 0
     if testing:
-        galaxy_count = 1
+        galaxy_count = 30
     bulged_count = 0
     xbulge_count = 0
     
-    galaxy = []
-    dtw_cost = []
+    galaxy, correlations_ALL = [], []
+    dtw_cost = [ [], [], [] ]
+    norm_cost = [ [], [], [] ]
 
     # for i in tqdm(range(galaxy_count)):
     for i in range(galaxy_count):
         g = table["Galaxy"][i]
 
-        if testing:
-            g = test_galaxy
+        # if testing:
+        #     g = test_galaxy
             
         if g=="D512-2" or g=="D564-8" or g=="D631-7" or g=="NGC4138" or g=="NGC5907" or g=="UGC06818":
             skips += 1
@@ -449,16 +756,19 @@ if __name__ == "__main__":
         # Rmin = min(np.diff(r)) # Minimum difference in r (used for upsampling the data)
 
         # Normalise velocities by Vmax = max(Vobs) from SPARC data.
-        v_components = np.array([ Vbar(data), data["Vobs"], MOND_Vobs(data) ])
-        Vmax = max(v_components[1])
-        v_components /= Vmax
+        v_LCDM = np.sqrt(Vbar(data)**2 + np.array(v_DM[i])**2)
+        v_components = np.array([ Vbar(data), data["Vobs"], MOND_Vobs(data), v_LCDM ])
+        # Vmax = max(v_components[1])
+        # v_components /= Vmax
 
         if bulged:
             bulged_count += 1
         else:
             xbulge_count += 1
         
-        rad = np.linspace(r[0], r[len(r)-1], num=1000)
+        # rad = np.linspace(r[0], r[len(r)-1], num=1000)
+        rad_count = math.ceil((max(r)-min(r))*100)
+        rad = np.linspace(min(r), max(r), rad_count)
 
         X, X_test = r.to_numpy(), rad
         
@@ -468,25 +778,56 @@ if __name__ == "__main__":
         print("==================================")
 
         main(args, g, X, v_components, X_test, bulged)
-
         galaxy.append(g)
 
+
+    """
+    Plot histogram of normalized DTW costs (in ascending order of costs for data).
+    """
+    # Rearrange galaxies into ascending order in norm_cost.
+    sort_args = np.argsort(norm_cost[0])
+    norm_cost = np.array(norm_cost)
+    costs_sorted = []   # [ [data], [MOND], [LCDM] ]
+    for j in range(3):
+        costs_sorted.append(norm_cost[j][sort_args])
+
+    # Plot histogram of normalized DTW alignment costs of all galaxies.
+    plt.title("Normalized DTW alignment costs")
+    hist_labels = [ "Data", "MOND", r"$\Lambda$CDM" ]
+    colours = [ 'k', 'mediumblue', 'tab:green' ]
+
+    for j in range(3):
+        mean_norm = np.mean(norm_cost[j])
+        plt.bar(galaxy, costs_sorted[j], color=colours[j], alpha=0.3, label=hist_labels[j])
+        plt.axhline(y=mean_norm, color=colours[j], linestyle='dashed', label="Mean = {:.4f}".format(mean_norm))
     
-    mean_cost = np.mean(dtw_cost)
-    norm_cost = np.array(dtw_cost) / (len(r) * 2)
-    mean_norm = np.mean(norm_cost)
+    plt.legend()
+    plt.xticks([])
+    plt.savefig(fileloc+"dtw/histo1.png", dpi=300, bbox_inches="tight")
+    plt.close()
+    
 
-    print("\nMean alignment cost = {:.4f}".format(mean_cost))
-    print("Mean normalized alignment cost = {:.4f}".format(mean_norm))
+    """
+    Plot histogram of differences in normalized DTW costs (mock - data, in ascending order of costs for MOND - data).
+    """
+    # Rearrange galaxies into ascending order in cost_diff(MOND).
+    cost_diff = np.array([norm_cost[1] - norm_cost[0], norm_cost[2] - norm_cost[0]])
+    sort_args = np.argsort(cost_diff[0])
+    diff_sorted = []   # [ [MOND], [LCDM] ]
+    for j in range(2):
+        diff_sorted.append(cost_diff[j][sort_args])
 
-    # # Plot histogram of normalized DTW alignment costs of all galaxies.
-    # plt.title("Normalized DTW alignment cost")
+    # Plot histogram of normalized DTW alignment costs of all galaxies.
+    plt.title("Normalised cost differences (mock - real data)")
+    hist_labels = [ "MOND", r"$\Lambda$CDM" ]
+    colours = [ 'mediumblue', 'red' ]
 
-    # plt.bar(galaxy, sorted(norm_cost))
-    # plt.plot([], [], ' ', label="Mean alginment cost = {:.4f}".format(mean_cost))
-    # plt.axhline(y=mean_norm, c='r', linestyle='dashed', label="Normalized mean = {:.4f}".format(mean_norm))
-    # plt.legend()
-    # plt.xticks([])
-
-    # plt.savefig(fileloc+"dtw/histo1.png", dpi=300, bbox_inches="tight")
-    # plt.close()
+    for j in range(2):
+        mean_diff = np.mean(cost_diff[j])
+        plt.bar(galaxy, diff_sorted[j], color=colours[j], alpha=0.4, label=hist_labels[j])
+        plt.axhline(y=mean_diff, color=colours[j], linestyle='dashed', label="Mean = {:.4f}".format(mean_diff))
+    
+    plt.legend()
+    plt.xticks([])
+    plt.savefig(fileloc+"dtw/histo2.png", dpi=300, bbox_inches="tight")
+    plt.close()
