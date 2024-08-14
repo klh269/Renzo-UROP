@@ -12,6 +12,7 @@ Compare the normalised alginment cost to get a handle of correlation.
 
 **Yet to account for errors/uncertainties, crucial for meaningful comparison/interpretation!
 """
+import jax.experimental
 import pandas as pd
 import argparse
 import os
@@ -572,6 +573,8 @@ def main(args, g, X, Y, X_test, bulged):
             plt.subplots_adjust(hspace=0.05)
             fig1.savefig(fileloc+subdir+deriv_dir[der]+g+".png", dpi=300, bbox_inches="tight")
             plt.close()
+    
+    jax.clear_caches()    # One-line attempt to solve the JIT memory allocation problem.
 
 
 if __name__ == "__main__":
@@ -657,6 +660,9 @@ if __name__ == "__main__":
 
     # for i in tqdm(range(galaxy_count)):
     for i in range(galaxy_count):
+        # if i < 47:
+        #     continue  # Programme terminated after GP for galaxy 48 due to some JIT memory allocation problem (even with 128 GB RAM!)
+
         g = table["Galaxy"][i]
             
         if g=="D512-2" or g=="D564-8" or g=="D631-7" or g=="NGC4138" or g=="NGC5907" or g=="UGC06818":
