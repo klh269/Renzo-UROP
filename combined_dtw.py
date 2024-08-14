@@ -67,7 +67,7 @@ def model(X, Y, ls=0):
     var = numpyro.sample("var", dist.LogNormal(0.0, 1.0))
     noise = numpyro.sample("noise", dist.LogNormal(0.0, 1.0))
     if ls == 0:
-        length = numpyro.sample("length", dist.Uniform(0., max(X)))
+        length = numpyro.sample("length", dist.Uniform(1., max(X)))
         k = kernel(X, X, var, length, noise)
     else:
         k = kernel(X, X, var, ls, noise)
@@ -441,6 +441,7 @@ def main(args, g, X, Y, X_test, bulged):
         bar_ratio.append(sum(mean_prediction[0][:rd]/mean_prediction[1][:rd]) / (rd+1))
 
     # Plot corrletaions as 1 main plot + 1 subplot, using only Vobs from data for Vbar/Vobs.
+    der_axis = [ "Residuals (km/s)", "1st derivative", "2nd derivative" ]
     for der in range(3):
         fig1, (ax0, ax1, ax2) = plt.subplots(3, 1, sharex=True, gridspec_kw={'height_ratios': [5, 2, 3]})
         fig1.set_size_inches(7, 7)
@@ -458,9 +459,10 @@ def main(args, g, X, Y, X_test, bulged):
         ax0.legend(bbox_to_anchor=(1, 1), loc="upper left")
         ax0.grid()
 
-        ax1.set_ylabel("Residuals (km/s)")
+        ax1.set_ylabel(der_axis[der])
         for j in range(4):
-            ax1.scatter(r, residuals[j], color=colours[j], alpha=0.3)
+            if der == 0:
+                ax1.scatter(r, residuals[j], color=colours[j], alpha=0.3)
             ax1.plot(X_test, res_fits[der][j], color=colours[j], label=v_comps[j])
 
         ax1.grid()
@@ -557,9 +559,10 @@ def main(args, g, X, Y, X_test, bulged):
             ax0.legend(bbox_to_anchor=(1, 1), loc="upper left")
             ax0.grid()
 
-            ax1.set_ylabel("Residuals (km/s)")
+            ax1.set_ylabel(der_axis[der])
             for j in range(4):
-                ax1.scatter(r, residuals[j], color=colours[j], alpha=0.3)
+                if der == 0:
+                    ax1.scatter(r, residuals[j], color=colours[j], alpha=0.3)
                 ax1.plot(X_test, res_fits[der][j], color=colours[j], label=v_comps[j])
 
             ax1.grid()
