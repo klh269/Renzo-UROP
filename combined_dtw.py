@@ -17,6 +17,7 @@ import pandas as pd
 import argparse
 import os
 import time
+from resource import getrusage, RUSAGE_SELF
 
 import matplotlib
 import matplotlib.pyplot as plt
@@ -259,6 +260,9 @@ def main(args, g, X, Y, X_test, bulged):
     """
     DTW on GP residuals.
     """
+    if testing:
+        print("\nRunning DTW on GP residuals...")
+    
     # Compute residuals of fits.
     res_Vbar, res_Vobs, res_MOND, res_LCDM = [], [] ,[], []
     for k in range(len(X)):
@@ -325,6 +329,9 @@ def main(args, g, X, Y, X_test, bulged):
     """
     Code for PCHIP on GP residuals.
     """
+    if testing:
+        print("Computing correlation coefficients...")
+
     # Interpolate the residuals with cubic Hermite spline splines.
     v_d0, v_d1, v_d2 = [], [], []
     for v_comp in residuals:
@@ -349,6 +356,9 @@ def main(args, g, X, Y, X_test, bulged):
     Correlation plots using sphers of increasing radius
     ---------------------------------------------------
     """
+    if testing:
+        print("Correlating coefficients by max radii...")
+
     # Correlate Vobs and Vbar (d0, d1, d2) as a function of (maximum) radius, i.e. spheres of increasing r.
     # correlations_r = rad_corr arrays with [ data, MOND, LCDM ], so 3 Vobs x 3 derivatives x 2 correlations each,
     # where rad_corr = [ [[Spearman d0], [Pearson d0]], [[S d1], [P d1]], [[S d2], [P d2]] ].
@@ -486,6 +496,9 @@ def main(args, g, X, Y, X_test, bulged):
     (Only for galaxies with Rmax > 1 * Reff)
     -----------------------------------------------------------------------
     """
+    if testing:
+        print("Correlating coefficients by moving window...")
+
     if len(X_test) > 100:
         # Correlate Vobs and Vbar (d0, d1, d2) along a moving window of length 1 * Reff.
         # correlations_w = win_corr arrays with [ data, MOND, LCDM ], so 3 Vobs x 3 derivatives x 2 correlations each,
@@ -574,6 +587,7 @@ def main(args, g, X, Y, X_test, bulged):
             fig1.savefig(fileloc+subdir+deriv_dir[der]+g+".png", dpi=300, bbox_inches="tight")
             plt.close()
     
+    print("Memory usage: %s (kb)" %getrusage(RUSAGE_SELF).ru_maxrss)
     jax.clear_caches()    # One-line attempt to solve the JIT memory allocation problem.
 
 
@@ -762,3 +776,5 @@ if __name__ == "__main__":
     plt.xticks([])
     plt.savefig(fileloc+"dtw/histo2.png", dpi=300, bbox_inches="tight")
     plt.close()
+
+    print("Max memory usage: %s (kb)" %getrusage(RUSAGE_SELF).ru_maxrss)
