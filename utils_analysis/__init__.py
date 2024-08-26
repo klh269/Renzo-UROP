@@ -1,4 +1,4 @@
+# (C) 2024 Enoch Ko.
 """
 Initialize package environment for utilities.
-(c) Enoch Ko 2024.
 """

@@ -1,6 +1,6 @@
+# (C) 2024 Enoch Ko.
 """
 Utilities and functions for correlating curves with Dynamic Time Warping.
-(C) 2024 Enoch Ko.
 """
 import numpy as np
 

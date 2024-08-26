@@ -1,10 +1,9 @@
+# (C) 2024 Enoch Ko.
 """
 Utilities and functions for non-linear regression with Gaussian Process.
-(C) 2024 Enoch Ko.
 """
 import jax.experimental
 import time
-import matplotlib
 import jax
 import jax.numpy as jnp
 
@@ -18,8 +17,6 @@ from numpyro.infer import (
     init_to_sample,
     init_to_uniform,
 )
-
-matplotlib.use("Agg")  # noqa: E402
 
 
 # Squared exponential kernel with diagonal noise term
