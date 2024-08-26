@@ -8,7 +8,7 @@ import corner
 from scipy.integrate import quad
 # from IPython.display import display, Math
 
-file = "C:/Users/admin/Desktop/Other/Oxford UROP 2024/SPARC_Lelli2016c.mrt.txt"
+file = "/mnt/users/koe/Oxford-UROP/SPARC_Lelli2016c.mrt.txt"
 SPARC_c = [ "T", "D", "e_D", "f_D", "Inc", "e_Inc",
             "L", "e_L", "Reff", "SBeff", "Rdisk",
             "SBdisk", "MHI", "RHI", "Vflat", "e_Vflat", "Q", "Ref."]
@@ -17,7 +17,7 @@ table = pd.read_fwf(file, skiprows=98, names=SPARC_c)
 
 # galaxy = [ "NGC5055", "NGC5585",
 #             "NGC6015", "NGC6946", "NGC7331" ]
-galaxy = [ "NGC2403" ]
+galaxy = [ "NGC6946" ]
 
 columns = [ "Rad", "Vobs", "errV", "Vgas",
             "Vdisk", "Vbul", "SBdisk", "SBbul" ]
@@ -40,7 +40,7 @@ def gNFWhalo_v(r, rho0, rc, alpha):
     def integrand(x):
         return rho0 / (x**alpha * (1+x)**(3-alpha)) # gNFW profile 
     Mr = quad(integrand, 0, x, args=(x))[0]
-    # print("Mr = "+str(Mr))
+    print("Mr = "+str(Mr))
     v = np.sqrt(G * Mr / r)
     return v
 
@@ -52,7 +52,7 @@ for g in galaxy:
     D, e_D = table["D"][g], table["e_D"][g] # Distance to galaxy
     Inc, e_Inc = table["Inc"][g], table["e_Inc"][g] # Inclination in degrees
     
-    file_path = "C:/Users/admin/Desktop/Other/Oxford UROP 2024/data/"+g+"_rotmod.dat"
+    file_path = "/mnt/users/koe/Oxford-UROP/data/"+g+"_rotmod.dat"
     rawdata = np.loadtxt(file_path)
     data = pd.DataFrame(rawdata, columns=columns)
     bulged = np.any(data["Vbul"]>0) # Check whether galaxy has bulge.
@@ -118,7 +118,7 @@ for g in galaxy:
         sampler = emcee.EnsembleSampler(nwalkers, ndim, lnprob, args=data)
     
         print("Running burn-in...")
-        p0, _, _ = sampler.run_mcmc(p0, 200, progress=True)
+        p0, _, _ = sampler.run_mcmc(p0, 500, progress=True)
         sampler.reset()
     
         print("Running production...")
@@ -129,8 +129,7 @@ for g in galaxy:
     fit_data = ( r, data["Vobs"], data["errV"] )
     nwalkers = 128
     niter = 50
-    # initial = np.array([D, Inc, 2e+6, 15, 1.0, 0.5])
-    initial = np.array([D, Inc, 2e+6, 15, 0.5])
+    initial = np.array([D, Inc, 2e+6, 15, 1.0, 0.5])
     if bulged:
         initial = np.append(initial, [0.7])
     print("initial = "+str(initial))
@@ -143,21 +142,21 @@ for g in galaxy:
     if bulged:
         labels.append('pbul')
         
-    # fig_test, axes = plt.subplots(ndim, sharex=True)
-    # samples_test = sampler.get_chain()
-    # for i in range(ndim):
-    #     ax = axes[i]
-    #     ax.plot(samples_test[:, :, i], "k", alpha=0.3)
-    #     ax.set_xlim(0, len(samples_test))
-    #     ax.set_ylabel(labels[i])
-    #     ax.yaxis.set_label_coords(-0.1, 0.5)
+    fig_test, axes = plt.subplots(ndim, sharex=True)
+    samples_test = sampler.get_chain()
+    for i in range(ndim):
+        ax = axes[i]
+        ax.plot(samples_test[:, :, i], "k", alpha=0.3)
+        ax.set_xlim(0, len(samples_test))
+        ax.set_ylabel(labels[i])
+        ax.yaxis.set_label_coords(-0.1, 0.5)
     
-    # axes[-1].set_xlabel("step number")
-    # fig_test.savefig("C:/Users/admin/Desktop/Other/Oxford UROP 2024/plots/DM_NFW/MCMC/time_series_"+g+".png", dpi=300, bbox_inches="tight")
+    axes[-1].set_xlabel("step number")
+    fig_test.savefig("/mnt/users/koe/Oxford-UROP/plots/DM_NFW/MCMC/time_series_"+g+".png", dpi=300, bbox_inches="tight")
     
-    # tau = sampler.get_autocorr_time()
-    # print(tau)
-    
+    tau = sampler.get_autocorr_time()
+    print(tau)
+
     theta_max = samples[np.argmax(sampler.flatlnprobability)]
     print('Theta max: ', theta_max)
     
@@ -201,28 +200,27 @@ for g in galaxy:
     plt.xlabel('Radius (kpc)')
     plt.ylabel('Velocities (km/s)')
     
-    # rho0, rc, alpha, pdisk = theta_max[2], theta_max[3], theta_max[4], theta_max[5]
-    rho0, rc, pdisk = theta_max[2], theta_max[3], theta_max[4]
+    rho0, rc, alpha, pdisk = theta_max[2], theta_max[3], theta_max[4], theta_max[5]
     if bulged:
-        pbul = theta_max[5]
+        pbul = theta_max[6]
     
     plt.plot(r, data["Vgas"], label="Gas")
     plt.plot(r, data["Vdisk"]*np.sqrt(pdisk), label="Stellar disc")
     if bulged:
         plt.plot(r, data["Vbul"]*np.sqrt(pbul), label="Bulge")
     plt.plot(r, Vpred(theta_max, wDM=False), linestyle="dashed", color="grey", label="Total curve W/O DM")
-    plt.plot(r, NFWhalo_v(r, rho0, rc), label="Dark matter halo - best fit")
+    plt.plot(r, gNFWhalo_v(r, rho0, rc, alpha), label="Dark matter halo - best fit")
     plt.plot(r, Vpred(theta_max), color="black", label="Total curve - best fit")
     plt.fill_between(r, med_model-spread, med_model+spread, color='yellow', alpha=0.5, label=r'$1\sigma$ posterior spread')
     plt.legend(bbox_to_anchor=(1,1), loc="upper left")
     
-    plt.savefig("C:/Users/admin/Desktop/Other/Oxford UROP 2024/plots/DM_NFW/MCMC/"+g+".png", dpi=300, bbox_inches="tight")
+    plt.savefig("/mnt/users/koe/Oxford-UROP/plots/DM_NFW/MCMC/gNFW_"+g+".png", dpi=300, bbox_inches="tight")
     plt.show()
     plt.close()
     
     fig = corner.corner(samples, show_titles=True, labels=labels, plot_datapoints=True, quantiles=[0.16, 0.5, 0.84], smooth=1)
-    fig.savefig("C:/Users/admin/Desktop/Other/Oxford UROP 2024/plots/DM_NFW/MCMC/"+g+"_corner.png", dpi=300, bbox_inches="tight")
-    plt.close(fig)
+    fig.savefig("/mnt/users/koe/Oxford-UROP/plots/DM_NFW/MCMC/gNFW_"+g+"_corner.png", dpi=300, bbox_inches="tight")
+    # plt.close(fig)
     
     print("=================================")
     

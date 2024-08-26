@@ -1,3 +1,10 @@
+#!/usr/bin/env python
+"""
+Fit smooth curve through Vobs and Vbar with GP,
+then align their residuals using dynamic time warping.
+
+NOTE: Use 20GB RAM (-n 20) when queueing or job might get stopped.
+"""
 import pandas as pd
 import argparse
 import os
@@ -31,10 +38,10 @@ from numpyro.infer import (
 
 matplotlib.use("Agg")  # noqa: E402
 
-testing = True
-test_galaxy = "DDO064"
+testing = True # Runs only one galaxy (test_galaxy)
+test_galaxy = "NGC6946"
 fileloc = "/mnt/users/koe/plots/gp_RQker/"
-progress_bar = True
+progress_bar = True # Progress bar for each MCMC.
 
 # Rational quadratic kernel
 def kernel(X, Z, var, length, alpha):
@@ -43,13 +50,15 @@ def kernel(X, Z, var, length, alpha):
     return k
 
 
-def model(X, Y):
+def model(X, Y, ls=0):
+    # set uninformative log-normal priors on our three kernel hyperparameters
     var = numpyro.sample("var", dist.LogNormal(0.0, 1.0))
     alpha = numpyro.sample("alpha", dist.Uniform(0.0, 10.0))
-    length = numpyro.sample("length", dist.Uniform(0., max(X)))
-
-    # compute kernel
-    k = kernel(X, X, var, length, alpha)
+    if ls == 0:
+        length = numpyro.sample("length", dist.Uniform(0., max(X)))
+        k = kernel(X, X, var, length, alpha)
+    else:
+        k = kernel(X, X, var, ls, alpha)
 
     # sample Y according to the standard gaussian process formula
     numpyro.sample(
@@ -60,15 +69,19 @@ def model(X, Y):
 
 
 # helper function for doing hmc inference
-def run_inference(model, args, rng_key, X, Y):
+def run_inference(model, args, rng_key, X, Y, ls=0):
     start = time.time()
     # demonstrate how to use different HMC initialization strategies
     if args.init_strategy == "value":
         init_strategy = init_to_value(
-            values={"var": 1.0, "alpha": 2.0, "length": 0.5}
+            values={"var": 1.0, "alpha": 1.0, "length": 0.5}
         )
+        if ls != 0:
+            init_strategy = init_to_value(
+                values={"var": 1.0, "alpha": 1.0, "length": ls}
+            )
     elif args.init_strategy == "median":
-        init_strategy = init_to_median(num_samples=10)
+        init_strategy = init_to_median(num_samples=100)
     elif args.init_strategy == "feasible":
         init_strategy = init_to_feasible()
     elif args.init_strategy == "sample":
@@ -84,7 +97,7 @@ def run_inference(model, args, rng_key, X, Y):
         thinning=args.thinning,
         progress_bar=progress_bar,
     )
-    mcmc.run(rng_key, X, Y)
+    mcmc.run(rng_key, X, Y, ls)
     mcmc.print_summary()
     print("\nMCMC elapsed time:", time.time() - start)
     return mcmc.get_samples()
@@ -113,47 +126,117 @@ def predict(rng_key, X, Y, X_test, var, length, alpha, use_cholesky=True):
         rng_key, X_test.shape[:1]
     )
 
-    # we return both the mean function and a sample from the posterior predictive for the
-    # given set of hyperparameters
+    # Return both the mean function and a sample from the 
+    # posterior predictive for the given set of hyperparameters
     return mean, mean + sigma_noise
 
-def main(args, g, X, Y, X_test, bulged):
+# Dynamic programming code for DTW, see dtw.py for details.
+def dp(dist_mat):
+    N, M = dist_mat.shape
+    
+    # Initialize the cost matrix
+    cost_mat = np.zeros((N + 1, M + 1))
+    for i in range(1, N + 1):
+        cost_mat[i, 0] = np.inf
+    for i in range(1, M + 1):
+        cost_mat[0, i] = np.inf
+
+    # Fill the cost matrix while keeping traceback information
+    traceback_mat = np.zeros((N, M))
+    for i in range(N):
+        for j in range(M):
+            penalty = [
+                cost_mat[i, j],      # match (0)
+                cost_mat[i, j + 1],  # insertion (1)
+                cost_mat[i + 1, j]]  # deletion (2)
+            i_penalty = np.argmin(penalty)
+            cost_mat[i + 1, j + 1] = dist_mat[i, j] + penalty[i_penalty]
+            traceback_mat[i, j] = i_penalty
+
+    # Traceback from bottom right
+    i = N - 1
+    j = M - 1
+    path = [(i, j)]
+    while i > 0 or j > 0:
+        tb_type = traceback_mat[i, j]
+        if tb_type == 0:
+            # Match
+            i = i - 1
+            j = j - 1
+        elif tb_type == 1:
+            # Insertion
+            i = i - 1
+        elif tb_type == 2:
+            # Deletion
+            j = j - 1
+        path.append((i, j))
+
+    # Strip infinity edges from cost_mat before returning
+    cost_mat = cost_mat[1:, 1:]
+    return (path[::-1], cost_mat)
+
+# Main code to run.
+def main(args, g, X, Y, X_test, bulged): 
         """
-        Do inference for each velocity compenent separately.
+        Do inference for Vobs with uniform prior for correlation length,
+        then apply the resulted lengthscale to Vbar.
         """
-        v_list = [ "Vobs", "Vbar", "Vgas", "Vdisk", "Vbul" ]
         mean_prediction = []
         percentiles = []
-        for i in range(len(Y)):
-            if i==4 and not bulged:
-                continue
-            
-            print("Fitting function to " + v_list[i])
-            rng_key, rng_key_predict = random.split(random.PRNGKey(0))
-            samples = run_inference(model, args, rng_key, X, np.array(Y[i]))
 
-            # do prediction
-            vmap_args = (
-                random.split(rng_key_predict, samples["var"].shape[0]),
-                samples["var"],
-                samples["length"],
-                samples["alpha"],
+        # GP on Vobs with uniform prior on length.
+        print("Fitting function to Vobs...")
+        rng_key, rng_key_predict = random.split(random.PRNGKey(0))
+        samples = run_inference(model, args, rng_key, X, np.array(Y[0]))
+
+        # do prediction
+        vmap_args = (
+            random.split(rng_key_predict, samples["var"].shape[0]),
+            samples["var"],
+            samples["length"],
+            samples["alpha"],
+        )
+        means, predictions = vmap(
+            lambda rng_key, var, length, alpha: predict(
+                rng_key, X, np.array(Y[0]), X_test, var, length, alpha, use_cholesky=args.use_cholesky
             )
-            means, predictions = vmap(
-                lambda rng_key, var, length, alpha: predict(
-                    rng_key, X, np.array(Y[i]), X_test, var, length, alpha, use_cholesky=args.use_cholesky
-                )
-            )(*vmap_args)
+        )(*vmap_args)
 
-            mean_prediction.append(np.mean(means, axis=0))
-            percentiles.append(np.percentile(predictions, [16.0, 84.0], axis=0))
+        mean_prediction.append(np.mean(means, axis=0))
+        percentiles.append(np.percentile(predictions, [16.0, 84.0], axis=0))
 
-            # labels = ["length", "var", "alpha"]
-            # samples_arr = np.vstack([samples[label] for label in labels]).T
-            # fig = corner.corner(samples_arr, show_titles=True, labels=labels, title_fmt=".3f", quantiles=[0.16, 0.5, 0.84], smooth=1)
-            # if i < 2:
-            #     fig.savefig(fileloc+"corner_"+v_list[i]+"/"+g+".png", dpi=300, bbox_inches="tight")
-            # plt.close(fig)
+        labels = ["length", "var", "alpha"]
+        samples_arr = np.vstack([samples[label] for label in labels]).T
+        fig = corner.corner(samples_arr, show_titles=True, labels=labels, title_fmt=".3f", quantiles=[0.16, 0.5, 0.84], smooth=1)
+        fig.savefig(fileloc+"corner_Vobs/"+g+".png", dpi=300, bbox_inches="tight")
+        plt.close()
+
+        # GP on Vbar with fixed lengthscale from Vobs.
+        ls = np.median(samples["length"])
+        print("\nFitting function to Vbar (with length = " + str(round(ls, 2)) + ")...")
+        rng_key, rng_key_predict = random.split(random.PRNGKey(0))
+        samples = run_inference(model, args, rng_key, X, np.array(Y[1]), ls=ls)
+
+        # do prediction
+        vmap_args = (
+            random.split(rng_key_predict, samples["var"].shape[0]),
+            samples["var"],
+            samples["alpha"],
+        )
+        means, predictions = vmap(
+            lambda rng_key, var, alpha: predict(
+                rng_key, X, np.array(Y[1]), X_test, var, ls, alpha, use_cholesky=args.use_cholesky
+            )
+        )(*vmap_args)
+
+        mean_prediction.append(np.mean(means, axis=0))
+        percentiles.append(np.percentile(predictions, [16.0, 84.0], axis=0))
+
+        labels = ["var", "alpha"]
+        samples_arr = np.vstack([samples[label] for label in labels]).T
+        fig = corner.corner(samples_arr, show_titles=True, labels=labels, title_fmt=".3f", quantiles=[0.16, 0.5, 0.84], smooth=1)
+        fig.savefig(fileloc+"corner_Vbar/"+g+".png", dpi=300, bbox_inches="tight")
+        plt.close()
 
         """
         Make plots.
@@ -161,40 +244,23 @@ def main(args, g, X, Y, X_test, bulged):
         fig0 = plt.figure(1)
         frame1 = fig0.add_axes((.1,.3,.8,.6))
         plt.title("Gaussian process: "+g)
-        # plt.xlabel(xlabel="Normalised radius "+r"($\times R_{eff}$)")
         plt.ylabel("Normalised velocities")
 
         plt.scatter(X, Y[0], color="k", alpha=0.3) # Vobs
         plt.scatter(X, Y[1], color="red", alpha=0.3) # Vbar
-        plt.scatter(X, Y[2], color="green", alpha=0.3) # Vgas
-        plt.scatter(X, Y[3]*np.sqrt(pdisk), color="blue", alpha=0.3) # Vdisk
-
-        # Plot splines from pchip_interpolate.
-        plt.plot(X, Y[0], '--', color="k", label="Vobs_spline", alpha=0.5)
-        plt.plot(X, Y[1], '--', color="red", label="Vbar_spline", alpha=0.5)
         
         # plot mean predictions.
         plt.plot(X_test, mean_prediction[0], color="k", label="Vobs")
         plt.plot(X_test, mean_prediction[1], color="red", label="Vbar")
-        plt.plot(X_test, mean_prediction[2], color="green", label="Vgas")
-        plt.plot(X_test, mean_prediction[3]*np.sqrt(pdisk), color="blue", label="Vdisk")
 
         # plot 68% (1 sigma) confidence level of predictions for Vobs and Vbar.
         plt.fill_between(X_test, percentiles[0][0, :], percentiles[0][1, :], color="k", alpha=0.2)
         plt.fill_between(X_test, percentiles[1][0, :], percentiles[1][1, :], color="red", alpha=0.2)
-        plt.fill_between(X_test, percentiles[2][0, :], percentiles[2][1, :], color="green", alpha=0.2)
-        plt.fill_between(X_test, percentiles[3][0, :]*np.sqrt(pdisk), percentiles[3][1, :]*np.sqrt(pdisk), color="blue", alpha=0.2)
-
-        # Same thing for galaxies w/ bulge.
-        if bulged:
-            plt.scatter(X, Y[4]*np.sqrt(pbul), color="darkorange", alpha=0.3)
-            plt.plot(X_test, mean_prediction[4]*np.sqrt(pbul), color="darkorange", label="Vbul")
-            plt.fill_between(X_test, percentiles[4][0, :]*np.sqrt(pbul), percentiles[4][1, :]*np.sqrt(pbul), color="darkorange", alpha=0.2)
-        
+   
         plt.legend(bbox_to_anchor=(1,1), loc="upper left")
         plt.grid()
         
-        # Compute residuals of fits. Maybe change this to spline-prediction for smoother residual plots?
+        # Compute residuals of fits.
         res_Vobs = []
         res_Vbar = []
         for k in range(len(X)):
@@ -215,13 +281,59 @@ def main(args, g, X, Y, X_test, bulged):
         fig0.savefig(fileloc+g+".png", dpi=300, bbox_inches="tight")
         plt.close()
 
+        """
+        DTW for residuals.
+        """
+        # Construct distance matrix.
+        dist_mat = np.zeros((len(r), len(r)))
+        for n in range(len(r)):
+            for m in range(len(r)):
+                dist_mat[n, m] = abs(res_Vobs[n] - res_Vbar[m])
+        
+        # DTW!
+        path, cost_mat = dp(dist_mat)
+        x_path, y_path = zip(*path)
+        cost = cost_mat[ len(r)-1, len(r)-1 ]
+        print("\nAlignment cost: {:.4f}".format(cost))
+        print("Normalized alignment cost: {:.4f}".format(cost/(len(r)*2)))
+
+        # Plot distance matrix and cost matrix with optimal path.
+        plt.title("Dynamic time warping: "+g)
+        plt.figure(figsize=(6, 4))
+        plt.subplot(121)
+        plt.title("Distance matrix")
+        plt.imshow(dist_mat, cmap=plt.cm.binary, interpolation="nearest", origin="lower")
+
+        plt.subplot(122)
+        plt.title("Cost matrix")
+        plt.imshow(cost_mat, cmap=plt.cm.binary, interpolation="nearest", origin="lower")
+        plt.plot(x_path, y_path)
+
+        plt.savefig(fileloc+"dtw/cost_matrix/"+g+".png", dpi=300, bbox_inches="tight")
+        plt.close()
+
+        # Visualize DTW alignment.
+        plt.figure()
+        plt.title("DTW alignment: "+g)
+
+        diff = abs(max(res_Vbar) - min(res_Vobs))
+        for x_i, y_j in path:
+            plt.plot([x_i, y_j], [res_Vobs[x_i] + diff, res_Vbar[y_j] - diff], c="C7", alpha=0.4)
+        plt.plot(np.arange(len(r)), np.array(res_Vobs) + diff, c="k", label="Vobs")
+        plt.plot(np.arange(len(r)), np.array(res_Vbar) - diff, c="red", label="Vbar")
+
+        plt.axis("off")
+        plt.legend()
+        plt.savefig(fileloc+"dtw/"+g+".png", dpi=300)
+        plt.close()
+
 
 if __name__ == "__main__":
     assert numpyro.__version__.startswith("0.15.0")
-    numpyro.enable_x64()
+    # numpyro.enable_x64()
     parser = argparse.ArgumentParser(description="Gaussian Process example") # To keep the inference from getting constant samples.
-    parser.add_argument("-n", "--num-samples", nargs="?", default=2000, type=int)
-    parser.add_argument("--num-warmup", nargs="?", default=2000, type=int)
+    parser.add_argument("-n", "--num-samples", nargs="?", default=1000, type=int)
+    parser.add_argument("--num-warmup", nargs="?", default=1000, type=int)
     parser.add_argument("--num-chains", nargs="?", default=1, type=int)
     parser.add_argument("--thinning", nargs="?", default=2, type=int)
     parser.add_argument("--num-data", nargs="?", default=25, type=int)
@@ -267,15 +379,6 @@ if __name__ == "__main__":
         galaxy_count = 1
     bulged_count = 0
     xbulge_count = 0
-
-    galaxy = []
-    fd_corr = []
-    spline_corr = []
-    bulged_corr = []
-    xbulge_corr = []
-    d2_corr = []
-    bulged_corr2 = []
-    xbulge_corr2 = []
     
     # for i in tqdm(range(galaxy_count)):
     for i in range(galaxy_count):
@@ -327,13 +430,11 @@ if __name__ == "__main__":
         rad = np.linspace(r[0], r[len(r)-1], num=1000)
 
         X, X_test = r.to_numpy(), rad
-        Y = np.array([ nVobs, nVbar, nVgas, nVdisk, nVbul ])
-        # Y = np.array([ nVobs, nVbar ])
+        Y = np.array([ nVobs, nVbar ])
               
         print("")
         print("==================================")
         print("Analyzing galaxy "+g+" ("+str(i+1)+"/175)")
         print("==================================")
-        # print("Rmax =", Rmax)
 
         main(args, g, X, Y, X_test, bulged)

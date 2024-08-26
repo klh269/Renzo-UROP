@@ -31,12 +31,12 @@ from numpyro.infer import (
 
 matplotlib.use("Agg")  # noqa: E402
 
-testing = False
-test_galaxy = "NGC5055"
+testing = True
+test_galaxy = "DDO064"
 fileloc = "/mnt/users/koe/plots/gp_pchip/"
 progress_bar = False
 
-# squared exponential kernel with diagonal noise term
+# Squared exponential kernel with diagonal noise term
 def kernel(X, Z, var, length, noise, jitter=1.0e-6, include_noise=True):
     deltaXsq = jnp.power((X[:, None] - Z) / length, 2.0)
     k = var * jnp.exp(-0.5 * deltaXsq)

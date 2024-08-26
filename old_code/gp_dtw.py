@@ -2,6 +2,8 @@
 """
 Fit smooth curve through Vobs and Vbar with GP,
 then align their residuals using dynamic time warping.
+
+NOTE: Use 30GB RAM (-n 30) when queueing or job might get stopped.
 """
 import pandas as pd
 import argparse
@@ -36,10 +38,13 @@ from numpyro.infer import (
 
 matplotlib.use("Agg")  # noqa: E402
 
+
 testing = False # Runs only one galaxy (test_galaxy)
-test_galaxy = "NGC6946"
+test_galaxy = "DDO064"
+progress_bar = False # Progress bar for each MCMC.
+
 fileloc = "/mnt/users/koe/plots/gp_dtw/"
-progress_bar = True # Progress bar for each MCMC.
+
 
 # Squared exponential kernel with diagonal noise term
 def kernel(X, Z, var, length, noise, jitter=1.0e-6, include_noise=True):
@@ -130,6 +135,7 @@ def predict(rng_key, X, Y, X_test, var, length, noise, use_cholesky=True):
     # posterior predictive for the given set of hyperparameters
     return mean, mean + sigma_noise
 
+
 # Dynamic programming code for DTW, see dtw.py for details.
 def dp(dist_mat):
     N, M = dist_mat.shape
@@ -175,158 +181,163 @@ def dp(dist_mat):
     cost_mat = cost_mat[1:, 1:]
     return (path[::-1], cost_mat)
 
+
 # Main code to run.
 def main(args, g, X, Y, X_test, bulged): 
-        """
-        Do inference for Vobs with uniform prior for correlation length,
-        then apply the resulted lengthscale to Vbar.
-        """
-        mean_prediction = []
-        percentiles = []
+    """
+    Do inference for Vobs with uniform prior for correlation length,
+    then apply the resulted lengthscale to Vbar.
+    """
+    mean_prediction = []
+    percentiles = []
 
-        # GP on Vobs with uniform prior on length.
-        print("Fitting function to Vobs...")
-        ls = 0
-        rng_key, rng_key_predict = random.split(random.PRNGKey(0))
-        samples = run_inference(model, args, rng_key, X, np.array(Y[0]))
+    # GP on Vobs with uniform prior on length.
+    print("Fitting function to Vobs...")
+    rng_key, rng_key_predict = random.split(random.PRNGKey(0))
+    samples = run_inference(model, args, rng_key, X, np.array(Y[0]))
 
-        # do prediction
-        vmap_args = (
-            random.split(rng_key_predict, samples["var"].shape[0]),
-            samples["var"],
-            samples["length"],
-            samples["noise"],
+    # do prediction
+    vmap_args = (
+        random.split(rng_key_predict, samples["var"].shape[0]),
+        samples["var"],
+        samples["length"],
+        samples["noise"],
+    )
+    means, predictions = vmap(
+        lambda rng_key, var, length, noise: predict(
+            rng_key, X, np.array(Y[0]), X_test, var, length, noise, use_cholesky=args.use_cholesky
         )
-        means, predictions = vmap(
-            lambda rng_key, var, length, noise: predict(
-                rng_key, X, np.array(Y[0]), X_test, var, length, noise, use_cholesky=args.use_cholesky
-            )
-        )(*vmap_args)
+    )(*vmap_args)
 
-        mean_prediction.append(np.mean(means, axis=0))
-        percentiles.append(np.percentile(predictions, [16.0, 84.0], axis=0))
+    mean_prediction.append(np.mean(means, axis=0))
+    percentiles.append(np.percentile(predictions, [16.0, 84.0], axis=0))
 
-        labels = ["length", "var", "noise"]
-        samples_arr = np.vstack([samples[label] for label in labels]).T
-        fig = corner.corner(samples_arr, show_titles=True, labels=labels, title_fmt=".3f", quantiles=[0.16, 0.5, 0.84], smooth=1)
-        fig.savefig(fileloc+"corner_Vobs/"+g+".png", dpi=300, bbox_inches="tight")
-        plt.close(fig)
+    labels = ["length", "var", "noise"]
+    # samples_arr = np.vstack([samples[label] for label in labels]).T
+    # fig = corner.corner(samples_arr, show_titles=True, labels=labels, title_fmt=".3f", quantiles=[0.16, 0.5, 0.84], smooth=1)
+    # fig.savefig(fileloc+"corner_Vobs/"+g+".png", dpi=300, bbox_inches="tight")
+    # plt.close()
 
-        # GP on Vbar with fixed lengthscale from Vobs.
-        ls = np.median(samples["length"])
-        print("\nFitting function to Vbar (with length = " + str(round(ls, 2)) + ")...")
-        rng_key, rng_key_predict = random.split(random.PRNGKey(0))
-        samples = run_inference(model, args, rng_key, X, np.array(Y[1]), ls=ls)
+    # GP on Vbar with fixed lengthscale from Vobs.
+    ls = np.median(samples["length"])
+    print("\nFitting function to Vbar (with length = " + str(round(ls, 2)) + ")...")
+    rng_key, rng_key_predict = random.split(random.PRNGKey(0))
+    samples = run_inference(model, args, rng_key, X, np.array(Y[1]), ls=ls)
 
-        # do prediction
-        vmap_args = (
-            random.split(rng_key_predict, samples["var"].shape[0]),
-            samples["var"],
-            samples["noise"],
+    # do prediction
+    vmap_args = (
+        random.split(rng_key_predict, samples["var"].shape[0]),
+        samples["var"],
+        samples["noise"],
+    )
+    means, predictions = vmap(
+        lambda rng_key, var, noise: predict(
+            rng_key, X, np.array(Y[1]), X_test, var, ls, noise, use_cholesky=args.use_cholesky
         )
-        means, predictions = vmap(
-            lambda rng_key, var, noise: predict(
-                rng_key, X, np.array(Y[1]), X_test, var, ls, noise, use_cholesky=args.use_cholesky
-            )
-        )(*vmap_args)
+    )(*vmap_args)
 
-        mean_prediction.append(np.mean(means, axis=0))
-        percentiles.append(np.percentile(predictions, [16.0, 84.0], axis=0))
+    mean_prediction.append(np.mean(means, axis=0))
+    percentiles.append(np.percentile(predictions, [16.0, 84.0], axis=0))
 
-        labels = ["var", "noise"]
-        samples_arr = np.vstack([samples[label] for label in labels]).T
-        fig = corner.corner(samples_arr, show_titles=True, labels=labels, title_fmt=".3f", quantiles=[0.16, 0.5, 0.84], smooth=1)
-        fig.savefig(fileloc+"corner_Vbar/"+g+".png", dpi=300, bbox_inches="tight")
-        plt.close(fig)
+    # labels = ["var", "noise"]
+    # samples_arr = np.vstack([samples[label] for label in labels]).T
+    # fig = corner.corner(samples_arr, show_titles=True, labels=labels, title_fmt=".3f", quantiles=[0.16, 0.5, 0.84], smooth=1)
+    # fig.savefig(fileloc+"corner_Vbar/"+g+".png", dpi=300, bbox_inches="tight")
+    # plt.close()
 
-        """
-        Make plots.
-        """
-        fig0 = plt.figure(1)
-        frame1 = fig0.add_axes((.1,.3,.8,.6))
-        plt.title("Gaussian process: "+g)
-        plt.ylabel("Normalised velocities")
 
-        plt.scatter(X, Y[0], color="k", alpha=0.3) # Vobs
-        plt.scatter(X, Y[1], color="red", alpha=0.3) # Vbar
-        
-        # plot mean predictions.
-        plt.plot(X_test, mean_prediction[0], color="k", label="Vobs")
-        plt.plot(X_test, mean_prediction[1], color="red", label="Vbar")
+    # """
+    # Make plots.
+    # """
+    # fig0 = plt.figure(1)
+    # frame1 = fig0.add_axes((.1,.3,.8,.6))
+    # plt.title("Gaussian process: "+g)
+    # plt.ylabel("Normalised velocities")
 
-        # plot 68% (1 sigma) confidence level of predictions for Vobs and Vbar.
-        plt.fill_between(X_test, percentiles[0][0, :], percentiles[0][1, :], color="k", alpha=0.2)
-        plt.fill_between(X_test, percentiles[1][0, :], percentiles[1][1, :], color="red", alpha=0.2)
-   
-        plt.legend(bbox_to_anchor=(1,1), loc="upper left")
-        plt.grid()
-        
-        # Compute residuals of fits.
-        res_Vobs = []
-        res_Vbar = []
-        for k in range(len(X)):
-            idx = (np.abs(X_test - X[k])).argmin()
-            res_Vobs.append(Y[0][k] - mean_prediction[0][idx])
-            res_Vbar.append(Y[1][k] - mean_prediction[1][idx])
+    # plt.scatter(X, Y[0], color="k", alpha=0.3) # Vobs
+    # plt.scatter(X, Y[1], color="red", alpha=0.3) # Vbar
+    
+    # # plot mean predictions.
+    # plt.plot(X_test, mean_prediction[0], color="k", label="Vobs")
+    # plt.plot(X_test, mean_prediction[1], color="red", label="Vbar")
 
-        frame2 = fig0.add_axes((.1,.1,.8,.2))
-        plt.xlabel(r'Normalised radius ($\times R_{eff}$)')
-        plt.ylabel("Residuals")
-        plt.scatter(r, res_Vobs, color='k', alpha=0.3, label="Vobs")
-        plt.scatter(r, res_Vbar, color='red', alpha=0.3, label="Vbar")
-        plt.plot(r, res_Vobs, color='k', alpha=0.5)
-        plt.plot(r, res_Vbar, color='red', alpha=0.5)
-        plt.legend(bbox_to_anchor=(1,1), loc="upper left")
-        plt.grid()
+    # # plot 68% (1 sigma) confidence level of predictions for Vobs and Vbar.
+    # plt.fill_between(X_test, percentiles[0][0, :], percentiles[0][1, :], color="k", alpha=0.2)
+    # plt.fill_between(X_test, percentiles[1][0, :], percentiles[1][1, :], color="red", alpha=0.2)
 
-        fig0.savefig(fileloc+g+".png", dpi=300, bbox_inches="tight")
-        plt.close()
+    # plt.legend(bbox_to_anchor=(1,1), loc="upper left")
+    # plt.grid()
+    
+    # # Compute residuals of fits.
+    res_Vobs = []
+    res_Vbar = []
+    for k in range(len(X)):
+        idx = (np.abs(X_test - X[k])).argmin()
+        res_Vobs.append(Y[0][k] - mean_prediction[0][idx])
+        res_Vbar.append(Y[1][k] - mean_prediction[1][idx])
 
-        """
-        DTW for residuals.
-        """
-        # Construct distance matrix.
-        dist_mat = np.zeros((len(r), len(r)))
-        for n in range(len(r)):
-            for m in range(len(r)):
-                dist_mat[n, m] = abs(res_Vobs[n] - res_Vbar[m])
-        
-        # DTW!
-        path, cost_mat = dp(dist_mat)
-        x_path, y_path = zip(*path)
-        cost = cost_mat[ len(r)-1, len(r)-1 ]
-        print("\nAlignment cost: {:.4f}".format(cost))
-        print("Normalized alignment cost: {:.4f}".format(cost/(len(r)*2)))
+    # frame2 = fig0.add_axes((.1,.1,.8,.2))
+    # plt.xlabel(r'Normalised radius ($\times R_{eff}$)')
+    # plt.ylabel("Residuals")
+    # plt.scatter(r, res_Vobs, color='k', alpha=0.3, label="Vobs")
+    # plt.scatter(r, res_Vbar, color='red', alpha=0.3, label="Vbar")
+    # plt.plot(r, res_Vobs, color='k', alpha=0.5)
+    # plt.plot(r, res_Vbar, color='red', alpha=0.5)
+    # plt.legend(bbox_to_anchor=(1,1), loc="upper left")
+    # plt.grid()
 
-        # Plot distance matrix and cost matrix with optimal path.
-        plt.title("Dynamic time warping: "+g)
-        plt.figure(figsize=(6, 4))
-        plt.subplot(121)
-        plt.title("Distance matrix")
-        plt.imshow(dist_mat, cmap=plt.cm.binary, interpolation="nearest", origin="lower")
+    # fig0.savefig(fileloc+g+".png", dpi=300, bbox_inches="tight")
+    # plt.close()
 
-        plt.subplot(122)
-        plt.title("Cost matrix")
-        plt.imshow(cost_mat, cmap=plt.cm.binary, interpolation="nearest", origin="lower")
-        plt.plot(x_path, y_path)
 
-        plt.savefig(fileloc+"dtw/cost_matrix/"+g+".png", dpi=300, bbox_inches="tight")
-        plt.close()
+    # """
+    # DTW for residuals.
+    # """
+    # Construct distance matrix.
+    dist_mat = np.zeros((len(r), len(r)))
+    for n in range(len(r)):
+        for m in range(len(r)):
+            dist_mat[n, m] = abs(res_Vobs[n] - res_Vbar[m])
+    
+    # # DTW!
+    path, cost_mat = dp(dist_mat)
+    x_path, y_path = zip(*path)
+    cost = cost_mat[ len(r)-1, len(r)-1 ]
+    dtw_cost.append(cost)
+    # # print("\nAlignment cost: {:.4f}".format(cost))
+    # # print("Normalized alignment cost: {:.4f}".format(cost/(len(r)*2)))
 
-        # Visualize DTW alignment.
-        plt.figure()
-        plt.title("DTW alignment: "+g)
+    # # Plot distance matrix and cost matrix with optimal path.
+    # plt.title("Dynamic time warping: "+g)
+    # plt.figure(figsize=(6, 4))
+    # plt.subplot(121)
+    # plt.title("Distance matrix")
+    # plt.imshow(dist_mat, cmap=plt.cm.binary, interpolation="nearest", origin="lower")
 
-        diff = abs(max(res_Vbar) - min(res_Vobs))
-        for x_i, y_j in path:
-            plt.plot([x_i, y_j], [res_Vobs[x_i] + diff, res_Vbar[y_j] - diff], c="C7", alpha=0.4)
-        plt.plot(np.arange(len(r)), np.array(res_Vobs) + diff, c="k", label="Vobs")
-        plt.plot(np.arange(len(r)), np.array(res_Vbar) - diff, c="red", label="Vbar")
+    # plt.subplot(122)
+    # plt.title("Cost matrix")
+    # plt.imshow(cost_mat, cmap=plt.cm.binary, interpolation="nearest", origin="lower")
+    # plt.plot(x_path, y_path)
 
-        plt.axis("off")
-        plt.legend()
-        plt.savefig(fileloc+"dtw/"+g+".png", dpi=300)
-        plt.close()
+    # plt.savefig(fileloc+"dtw/cost_matrix/"+g+".png", dpi=300, bbox_inches="tight")
+    # plt.close()
+
+    # # Visualize DTW alignment.
+    # plt.figure()
+    # plt.title("DTW alignment: "+g)
+
+    # diff = abs(max(res_Vbar) - min(res_Vobs))
+    # for x_i, y_j in path:
+    #     plt.plot([x_i, y_j], [res_Vobs[x_i] + diff, res_Vbar[y_j] - diff], c="C7", alpha=0.4)
+    # plt.plot(np.arange(len(r)), np.array(res_Vobs) + diff, c="k", label="Vobs")
+    # plt.plot(np.arange(len(r)), np.array(res_Vbar) - diff, c="red", label="Vbar")
+    # plt.plot([], [], c='w', label="Alignment cost = {:.4f}".format(cost))
+    # plt.plot([], [], c='w', label="Normalized cost = {:.4f}".format(cost/(len(r)*2)))
+
+    # plt.axis("off")
+    # plt.legend(bbox_to_anchor=(1,1))
+    # plt.savefig(fileloc+"dtw/"+g+".png", dpi=300, bbox_inches="tight")
+    # plt.close()
 
 
 if __name__ == "__main__":
@@ -350,6 +361,7 @@ if __name__ == "__main__":
 
     numpyro.set_platform(args.device)
     numpyro.set_host_device_count(args.num_chains)
+
 
     # Get galaxy data from table1.
     file = "/mnt/users/koe/SPARC_Lelli2016c.mrt.txt"
@@ -377,21 +389,24 @@ if __name__ == "__main__":
     galaxy_count = len(table["Galaxy"])
     skips = 0
     if testing:
-        galaxy_count = 1
+        galaxy_count = 7
     bulged_count = 0
     xbulge_count = 0
     
+    galaxy = []
+    dtw_cost = []
+
     # for i in tqdm(range(galaxy_count)):
     for i in range(galaxy_count):
         # Galaxies which fail to produce corner plots:
         # DDO161 (7/175), F563-1 (15), F568-3 (21), F583-1 (28)
-        # if i < 6:
+        # if i < 77:
         #     continue
 
         g = table["Galaxy"][i]
 
-        if testing:
-            g = test_galaxy
+        # if testing:
+        #     g = test_galaxy
             
         if g=="D512-2" or g=="D564-8" or g=="D631-7" or g=="NGC4138" or g=="NGC5907" or g=="UGC06818":
             skips += 1
@@ -406,6 +421,10 @@ if __name__ == "__main__":
         data = pd.DataFrame(rawdata, columns=columns)
         bulged = np.any(data["Vbul"]>0) # Check whether galaxy has bulge.
         r = data["Rad"] / table["Rdisk"][i] # Normalised radius (Rdisk = scale length of stellar disk).
+
+        # Reject galaxies with less than 10 data points.
+        if len(r) < 10:
+            continue
 
         Rmax = max(np.diff(r)) # Maximum difference in r of data points (to be used as length scale for GP kernel)
         # Rmin = min(np.diff(r)) # Minimum difference in r (used for upsampling the data)
@@ -435,3 +454,25 @@ if __name__ == "__main__":
         print("==================================")
 
         main(args, g, X, Y, X_test, bulged)
+
+        galaxy.append(g)
+
+    
+    mean_cost = np.mean(dtw_cost)
+    norm_cost = np.array(dtw_cost) / (len(r) * 2)
+    mean_norm = np.mean(norm_cost)
+
+    print("\nMean alignment cost = {:.4f}".format(mean_cost))
+    print("Mean normalized alignment cost = {:.4f}".format(mean_norm))
+
+    # Plot histogram of normalized DTW alignment costs of all galaxies.
+    plt.title("Normalized DTW alignment cost")
+
+    plt.bar(galaxy, sorted(norm_cost))
+    plt.plot([], [], ' ', label="Mean alginment cost = {:.4f}".format(mean_cost))
+    plt.axhline(y=mean_norm, c='r', linestyle='dashed', label="Normalized mean = {:.4f}".format(mean_norm))
+    plt.legend()
+    plt.xticks([])
+
+    plt.savefig(fileloc+"dtw/histo1.png", dpi=300, bbox_inches="tight")
+    plt.close()

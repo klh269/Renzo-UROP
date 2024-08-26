@@ -14,8 +14,8 @@ from tqdm import tqdm
 
 # Trigger for code testing; "testing = True" runs the main for-loop with only the first galaxy.
 testing = False
-test_galaxy = "DDO064"
-makeplots = True
+test_galaxy = "NGC2403"
+makeplots = False
 
 directory = "/mnt/users/koe/plots/pchip_sg/"
 file = "/mnt/users/koe/SPARC_Lelli2016c.mrt.txt"
@@ -119,15 +119,33 @@ for i in tqdm(range(galaxy_count)):
         rp_d1.append(stats.pearsonr(d1_sg[0][:j], d1_sg[1][:j])[0])
         rp_d2.append(stats.pearsonr(d2_sg[0][:j], d2_sg[1][:j])[0])
     
-    # Computes ratio arr1/arr2, averaged across length of each segmented array (increasing R).
-    def mean_ratio(arr1, arr2):
-        ratio = []
-        for j in range(len(arr1)):
-            ratio.append(sum(arr1[:j]/arr2[:j]) / (j+1))
-        return ratio
+    # Correlate Vobs and Vbar in windows of length 1*Reff.
+    ws_d0, ws_d1, ws_d2 = [], [], []
+    wp_d0, wp_d1, wp_d2 = [], [], []
+    wmax = len(rad) - 50
+
+    if len(rad) > 100:
+        for j in range(50, wmax):
+            jmin, jmax = j-50, j+50
+            # Spearman rho.
+            ws_d0.append(stats.spearmanr(d0_sg[0][jmin:jmax], d0_sg[1][jmin:jmax])[0])
+            ws_d1.append(stats.spearmanr(d1_sg[0][jmin:jmax], d1_sg[1][jmin:jmax])[0])
+            ws_d2.append(stats.spearmanr(d2_sg[0][jmin:jmax], d2_sg[1][jmin:jmax])[0])
+            # Pearson rho.
+            wp_d0.append(stats.pearsonr(d0_sg[0][jmin:jmax], d0_sg[1][jmin:jmax])[0])
+            wp_d1.append(stats.pearsonr(d1_sg[0][jmin:jmax], d1_sg[1][jmin:jmax])[0])
+            wp_d2.append(stats.pearsonr(d2_sg[0][jmin:jmax], d2_sg[1][jmin:jmax])[0])
 
     # Compute baryonic dominance, i.e. average Vbar/Vobs from centre to some max radius.
-    bar_ratio = mean_ratio(v_d0[1], v_d0[0])
+    bar_ratio = []
+    for j in range(len(v_d0[1])):
+        bar_ratio.append(sum(v_d0[1][:j]/v_d0[0][:j]) / (j+1))
+
+    # Compute average baryonic dominance in windows of length 1 * Reff.
+    wbar_ratio = []
+    if len(rad) > 100:
+        for j in range(50, wmax):
+            wbar_ratio.append(sum(v_d0[1][j-50:j+50]/v_d0[0][j-50:j+50]) / 101)
 
     # Compute correlation between rs or rp and the baryonic ratio, using rs for rs-bar and rp for rp-bar.
     scorr_d0 = stats.spearmanr(rs_d0, bar_ratio[10:])[0]
@@ -180,6 +198,13 @@ for i in tqdm(range(galaxy_count)):
 
         fig0.savefig(directory+g+".png", dpi=300, bbox_inches="tight")
         plt.close()
+
+
+        """
+        ---------------------------------------------------
+        Correlation plots using sphers of increasing radius
+        ---------------------------------------------------
+        """
 
         """
         Plot the spline fits again, but now only for Vobs and Vbar (top plot),
@@ -309,6 +334,178 @@ for i in tqdm(range(galaxy_count)):
         plt.subplots_adjust(hspace=0.05)
         fig2.savefig(directory+"d2/"+g+".png", dpi=300, bbox_inches="tight")
         plt.close()
+    
+
+    """
+    ---------------------------------------------------
+    Correlation plots using windows of length 1 * Reff.
+    ---------------------------------------------------
+    """
+    if len(rad) > 100:
+        """
+        Plot the spline fits for Vobs and Vbar (top plot),
+        and their Spearman correlation alongside the galaxy's (average) baryonic ratio (bottom plot).
+        """
+        fig0, (ax1, ax3) = plt.subplots(2, 1, sharex=True)
+        ax1.set_title("PCHIP + SG filter: "+g)
+        ax1.set_ylabel("Normalised velocities")
+
+        ax1.scatter(r, v_components[0], color="k", alpha=0.3)
+        ln1 = ax1.plot(rad, d0_sg[0], color="k", label="Vobs")
+        ax1.scatter(r, v_components[1], color="red", alpha=0.3)
+        ln2 = ax1.plot(rad, d0_sg[1], color="red", label="Vbar")
+        
+        lns = ln1 + ln2
+        labels = [l.get_label() for l in lns]
+        ax1.legend(lns, labels, bbox_to_anchor=(1.35,1))
+
+        color = "tab:blue"
+        ax3.set_xlabel(r'Normalised radius ($\times R_{eff}$)')
+        ax3.set_ylabel("Correlation")
+        ln3 = ax3.plot(rad[50:wmax], ws_d0, color=color, label=r"Spearman $\rho$")
+        ln4 = ax3.plot(rad[50:wmax], wp_d0, ':', color=color, label=r"Pearson $\rho$")
+        ax3.tick_params(axis='y', labelcolor=color)
+
+        ax4 = ax3.twinx()
+        color = "orange"
+        ax4.set_ylabel(r'Average $v_{bar}/v_{obs}$')
+        ln5 = ax4.plot(rad[50:wmax], wbar_ratio, '--', color=color, label="Vbar/Vobs")
+        ax4.tick_params(axis='y', labelcolor=color)
+
+        ln6 = ax4.plot([], [], ' ', label=r"$\rho_s=$"+str(round(scorr_d0, 3))+r", $\rho_p=$"+str(round(pcorr_d0, 3)))
+        lns = ln3 + ln4 + ln5 + ln6
+        labels = [l.get_label() for l in lns]
+        ax3.legend(lns, labels, bbox_to_anchor=(1.57,1))
+
+        plt.subplots_adjust(hspace=0.05)
+        fig0.savefig(directory+"window/d0/"+g+".png", dpi=300, bbox_inches="tight")
+        plt.close()
+
+        """
+        Plot first derivatives of the splines for Vobs and Vbar (top plot),
+        and their Spearman correlation alongside the galaxy's (average) baryonic ratio (bottom plot).
+        """
+        fig1, (ax1, ax3) = plt.subplots(2, 1, sharex=True)
+        ax1.set_title("First derivative: "+g)
+        
+        color = "tab:red"
+        ax1.set_ylabel(r'$dv_{bar}/dr$', color=color)
+
+        ln1 = ax1.plot(rad, d1_sg[1], color=color, label="Vbar")
+        ax1.tick_params(axis='y', labelcolor=color)
+        
+        ax2 = ax1.twinx()
+        color = "black"
+        ax2.set_ylabel(r'$dv_{obs}/dr$', color=color)
+        ln2 = ax2.plot(rad, d1_sg[0], color=color, label="Vobs")
+        ax2.tick_params(axis='y', labelcolor=color)
+        
+        lns = ln1 + ln2
+        labels = [l.get_label() for l in lns]
+        ax1.legend(lns, labels, bbox_to_anchor=(1.35,1))
+
+        color = "tab:blue"
+        ax3.set_xlabel(r'Normalised radius ($\times R_{eff}$)')
+        ax3.set_ylabel("Correlation")
+        ln3 = ax3.plot(rad[50:wmax], ws_d1, color=color, label=r"Spearman $\rho$")
+        ln4 = ax3.plot(rad[50:wmax], wp_d1, ':', color=color, label=r"Pearson $\rho$")
+        ax3.tick_params(axis='y', labelcolor=color)
+
+        ax4 = ax3.twinx()
+        color = "orange"
+        ax4.set_ylabel(r'Average $v_{bar}/v_{obs}$')
+        ln5 = ax4.plot(rad[50:wmax], wbar_ratio, '--', color=color, label="Vbar/Vobs")
+        ax4.tick_params(axis='y', labelcolor=color)
+
+        ln6 = ax4.plot([], [], ' ', label=r"$\rho_s=$"+str(round(scorr_d1, 3))+r", $\rho_p=$"+str(round(pcorr_d1, 3)))
+        lns = ln3 + ln4 + ln5 + ln6
+        labels = [l.get_label() for l in lns]
+        ax3.legend(lns, labels, bbox_to_anchor=(1.57,1))
+
+        plt.subplots_adjust(hspace=0.05)
+        fig1.savefig(directory+"window/d1/"+g+".png", dpi=300, bbox_inches="tight")
+        plt.close()
+
+        """
+        Plot second derivatives of splines for Vobs and Vbar (top plot),
+        and their Spearman correlation alongside the galaxy's (average) baryonic ratio (bottom plot).
+        """
+        fig2, (ax1, ax3) = plt.subplots(2, 1, sharex=True)
+        ax1.set_title("Second derivative: "+g)
+        
+        color = "tab:red"
+        ax1.set_ylabel(r'$d^2v_{bar}/dr^2$', color=color)
+
+        ln1 = ax1.plot(rad, d2_sg[1], color=color, label="Vbar")
+        ax1.tick_params(axis='y', labelcolor=color)
+        
+        ax2 = ax1.twinx()
+        color = "black"
+        ax2.set_ylabel(r'$d^2v_{obs}/dr^2$', color=color)
+        ln2 = ax2.plot(rad, d2_sg[0], color=color, label="Vobs")
+        ax2.tick_params(axis='y', labelcolor=color)
+        
+        lns = ln1 + ln2
+        labels = [l.get_label() for l in lns]
+        ax1.legend(lns, labels, bbox_to_anchor=(1.35,1))
+
+        color = "tab:blue"
+        ax3.set_xlabel(r'Normalised radius ($\times R_{eff}$)')
+        ax3.set_ylabel("Correlation")
+        ln3 = ax3.plot(rad[50:wmax], ws_d2, color=color, label=r"Spearman $\rho$")
+        ln4 = ax3.plot(rad[50:wmax], wp_d2, ':', color=color, label=r"Pearson $\rho$")
+        ax3.tick_params(axis='y', labelcolor=color)
+
+        ax4 = ax3.twinx()
+        color = "orange"
+        ax4.set_ylabel(r'Average $v_{bar}/v_{obs}$')
+        ln5 = ax4.plot(rad[50:wmax], wbar_ratio, '--', color=color, label="Vbar/Vobs")
+        ax4.tick_params(axis='y', labelcolor=color)
+
+        ln6 = ax4.plot([], [], ' ', label=r"$\rho_s=$"+str(round(scorr_d2, 3))+r", $\rho_p=$"+str(round(pcorr_d2, 3)))
+        lns = ln3 + ln4 + ln5 + ln6
+        labels = [l.get_label() for l in lns]
+        ax3.legend(lns, labels, bbox_to_anchor=(1.57,1))
+
+        plt.subplots_adjust(hspace=0.05)
+        fig2.savefig(directory+"window/d2/"+g+".png", dpi=300, bbox_inches="tight")
+        plt.close()
+
+    galaxy.append(g)
+
+
+if makeplots:
+    # Plot histogram of corr(rho, Vbar/Vobs) of all galaxies.
+    fig, (ax1, ax2, ax3) = plt.subplots(3, 1)
+    ax1.set_title(r"Correlation between $\rho$ and Vbar/Vobs")
+
+    ax1.bar(galaxy, correlations_sd0, alpha=0.5, label=r"Spearman $\rho(\rho_s,$Vbar/Vobs)")
+    ax1.bar(galaxy, correlations_pd0, alpha=0.5, label=r"Pearson $\rho(\rho_p,$Vbar/Vobs)")
+    ax1.plot([], [], c='w', label="Spline fit:")
+    ax1.plot([], [], c='w', label="Spearman mean = %.3f" %np.nanmean(correlations_sd0))
+    ax1.plot([], [], c='w', label="Pearson mean = %.3f" %np.nanmean(correlations_pd0))
+    ax1.legend(bbox_to_anchor=(1,1))
+    ax1.get_xaxis().set_visible(False)
+
+    ax2.bar(galaxy, correlations_sd1, alpha=0.5, label=r"Spearman $\rho(\rho_s,$ Vbar/Vobs)")
+    ax2.bar(galaxy, correlations_pd1, alpha=0.5, label=r"Pearson $\rho(\rho_p,$ Vbar/Vobs)")
+    ax2.plot([], [], c='w', label="First derivative:")
+    ax2.plot([], [], c='w', label="Spearman mean = %.3f" %np.nanmean(correlations_sd1))
+    ax2.plot([], [], c='w', label="Pearson mean = %.3f" %np.nanmean(correlations_pd1))
+    ax2.legend(bbox_to_anchor=(1,1))
+    ax2.get_xaxis().set_visible(False)
+
+    ax3.bar(galaxy, correlations_sd2, alpha=0.5, label=r"Spearman $\rho(\rho_s,$ Vbar/Vobs)")
+    ax3.bar(galaxy, correlations_pd2, alpha=0.5, label=r"Pearson $\rho(\rho_p,$ Vbar/Vobs)")
+    ax3.plot([], [], c='w', label="Second derivative:")
+    ax3.plot([], [], c='w', label="Spearman mean = %.3f" %np.nanmean(correlations_sd2))
+    ax3.plot([], [], c='w', label="Pearson mean = %.3f" %np.nanmean(correlations_pd2))
+    ax3.legend(bbox_to_anchor=(1,1))
+    ax3.get_xaxis().set_visible(False)
+
+    plt.savefig(directory+"histo1.png", dpi=300, bbox_inches="tight")
+    plt.close()
+
 
 print("Mean correlations:")
 print("rs_d0 = ", np.nanmean(correlations_sd0))

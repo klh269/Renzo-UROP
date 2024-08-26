@@ -12,7 +12,6 @@ from matplotlib.patches import ConnectionPatch
 import matplotlib.pyplot as plt
 import math
 import numpy as np
-import scipy.spatial.distance as dist
 from scipy import interpolate, signal
 import pandas as pd
 from tqdm import tqdm
@@ -22,7 +21,7 @@ testing = False
 test_galaxy = "DDO064"
 makeplots = True
 
-directory = "/mnt/users/koe/plots/dtw/"
+directory = "/mnt/users/koe/plots/dtw/raw_data/"
 file = "/mnt/users/koe/SPARC_Lelli2016c.mrt.txt"
 
 SPARC_c = [ "Galaxy", "T", "D", "e_D", "f_D", "Inc",
@@ -143,6 +142,7 @@ for i in tqdm(range(galaxy_count)):
     else:
         xbulge_count += 1
 
+    """
     # Interpolate the data with cubic Hermite spline splines.
     rad_count = math.ceil((max(r)-min(r))*100)
     rad = np.linspace(min(r), max(r), rad_count)
@@ -160,17 +160,20 @@ for i in tqdm(range(galaxy_count)):
     #     d1_sg.append(signal.savgol_filter(v_comp1, 50, 2))
     # for v_comp2 in v_d2:
     #     d2_sg.append(signal.savgol_filter(v_comp2, 50, 2))
-
+    """
+    
     """
     Set up and run dynamic time warping.
     """
     # Construct distance matrix.
-    dist_mat0 = np.zeros((rad_count, rad_count))
+    dist_mat0 = np.zeros((len(r), len(r)))
+    # dist_mat0 = np.zeros((rad_count, rad_count))
     # dist_mat1 = np.zeros((rad_count, rad_count))
     # dist_mat2 = np.zeros((rad_count, rad_count))
-    for n in range(rad_count):
-        for m in range(rad_count):
-            dist_mat0[n, m] = abs(d0_sg[0][n] - d0_sg[1][m])
+    for n in range(len(r)):
+        for m in range(len(r)):
+            dist_mat0[n, m] = abs(v_components[0][n] - v_components[1][m])
+            # dist_mat0[n, m] = abs(d0_sg[0][n] - d0_sg[1][m])
             # dist_mat1[n, m] = abs(d1_sg[0][n] - d1_sg[1][m])
             # dist_mat2[n, m] = abs(d2_sg[0][n] - d2_sg[1][m])
 
@@ -204,10 +207,13 @@ for i in tqdm(range(galaxy_count)):
         plt.title("DTW alignment: "+g)
 
         for x_i, y_j in path:
-            if x_i%(math.ceil(rad_count/100))==0 or y_j%(math.ceil(rad_count/100))==0:
-                plt.plot([x_i, y_j], [d0_sg[0][x_i] + 0.5, d0_sg[1][y_j] - 0.5], c="C7", alpha=0.4)
-        plt.plot(np.arange(rad_count), d0_sg[0] + 0.5, c=colors[0], label=labels[0])
-        plt.plot(np.arange(rad_count), d0_sg[1] - 0.5, c=colors[1], label=labels[1])
+            # if x_i%(math.ceil(rad_count/100))==0 or y_j%(math.ceil(rad_count/100))==0:
+        #     plt.plot([x_i, y_j], [d0_sg[0][x_i] + 0.5, d0_sg[1][y_j] - 0.5], c="C7", alpha=0.4)
+        # plt.plot(np.arange(rad_count), d0_sg[0] + 0.5, c=colors[0], label=labels[0])
+        # plt.plot(np.arange(rad_count), d0_sg[1] - 0.5, c=colors[1], label=labels[1])
+            plt.plot([x_i, y_j], [v_components[0][x_i] + 0.5, v_components[1][y_j] - 0.5], c="C7", alpha=0.4)
+        plt.plot(np.arange(len(r)), v_components[0] + 0.5, c=colors[0], label=labels[0])
+        plt.plot(np.arange(len(r)), v_components[1] - 0.5, c=colors[1], label=labels[1])
 
         plt.axis("off")
         plt.legend()

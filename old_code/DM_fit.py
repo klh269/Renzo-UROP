@@ -6,7 +6,7 @@ from scipy.optimize import curve_fit
 
 # galaxy = [ "NGC5055", "NGC5585",
 #             "NGC6015", "NGC6946", "NGC7331" ]
-galaxy = [ "NGC2403" ]
+galaxy = [ "NGC6946" ]
 
 columns = [ "Rad", "Vobs", "errV", "Vgas",
             "Vdisk", "Vbul", "SBdisk", "SBbul" ]
@@ -38,7 +38,7 @@ for g in galaxy:
     Plotting galaxy rotation curves directly from data with variables:
     Vobs (overall observed, corrected for inclination), Vgas, Vdisk, Vbul.
     """
-    file_path = "C:/Users/admin/Desktop/Other/Oxford UROP 2024/data/"+g+"_rotmod.dat"
+    file_path = "C:/Users/admin/OneDrive/Desktop/Other/Oxford UROP 2024/data/"+g+"_rotmod.dat"
     rawdata = np.loadtxt(file_path)
     data = pd.DataFrame(rawdata, columns=columns)
     r = data["Rad"]
@@ -67,13 +67,13 @@ for g in galaxy:
     plt.errorbar(r, data["Vobs"], yerr=data["errV"], fmt=".", capsize=3, label="Total curve - observed")
     plt.plot(r, data["Vgas"], label="Gas")
     plt.plot(r, data["Vdisk"]*np.sqrt(pdisk), label="Stellar disc")
-    # plt.plot(r, data["Vbul"]*np.sqrt(pbul), label="Bulge")
+    plt.plot(r, data["Vbul"]*np.sqrt(pbul), label="Bulge")
     plt.plot(r, total_v_noDM(data), linestyle="dashed", color="grey", label="Total curve W/O DM")
     plt.plot(r, halo_v(r, rho0, rc), label="Dark matter halo - best fit")
     plt.plot(r, total_v(r, rho0, rc), color="black", label="Total curve WITH DM (fit)")
-    plt.fill_between(r, total_v(r, *(parameters-perr)), total_v(r, *(parameters+perr)), facecolor="yellow", alpha=0.5, label=r"$1\sigma$ confidence spread")
+    plt.fill_between(r, total_v(r, *(parameters-perr)), total_v(r, *(parameters+perr)), facecolor="yellow", alpha=0.5, label=r"$1 \sigma$ range from DM fit")
     plt.legend(bbox_to_anchor=(1,1), loc="upper left")
     
-    plt.savefig("C:/Users/admin/Desktop/Other/Oxford UROP 2024/plots/DM_NFW/"+g+".png", dpi=300, bbox_inches="tight")
+    # plt.savefig("C:/Users/admin/OneDrive/Desktop/Other/Oxford UROP 2024/plots/DM_NFW/"+g+".png", dpi=300, bbox_inches="tight")
     plt.show()
     plt.close()

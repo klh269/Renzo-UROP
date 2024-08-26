@@ -63,7 +63,7 @@ xbulge_corr2 = []
 
 for i in tqdm(range(galaxy_count)):
     g = table["Galaxy"][i]
-    g = "NGC6946"
+    g = "UGC11455"
     
     if g=="D512-2" or g=="D564-8" or g=="D631-7" or g=="NGC4138" or g=="NGC5907" or g=="UGC06818":
         skips += 1
