@@ -12,14 +12,6 @@ from .params import pbul, pdisk, a0, num_samples
 from .Vobs_fits import Vobs_fit
 
 
-# Calculate baryonic matter from data of individual galaxies.
-def Vbar_sq(arr, bulged):
-    if bulged:
-        v_sq = arr["Vgas"]**2 + arr["Vdisk"]**2 * pdisk + arr["Vbul"]**2 * pbul
-    else:
-        v_sq = arr["Vgas"]**2 + arr["Vdisk"]**2 * pdisk
-    return v_sq
-
 # Sample Vbar squared with uncertainties in M/L ratios, luminosities and distances.
 def Vbar_sq_unc(table, i_table, data, bulged=False, num_samples=num_samples):
     # Sample mass-to-light ratios
@@ -56,14 +48,6 @@ def Vbar_sq_unc(table, i_table, data, bulged=False, num_samples=num_samples):
     return Vbar_squared
 
 
-def MOND_Vobs(r, Vbar2, a0=a0):
-    # Quadratic solution from MOND simple interpolating function.
-    acc = Vbar2 / r
-    y = acc / a0
-    nu = 1 + np.sqrt((1 + 4/y))
-    nu /= 2
-    return np.sqrt(acc * nu * r)
-
 def MOND_unc(r, Vbar2_unc, num_samples=num_samples):
     r_unc = np.array([r] * num_samples).T
     acc = Vbar2_unc / r_unc
@@ -89,7 +73,7 @@ def Vobs_scat_corr(Vobs, errV, num_samples=num_samples):
 # Fit LCDM mock data (NFW halo profile) to Vobs array.
 def LCDM_Vobs(table, i_table, data, bulged, profile="NFW"):
     nuts_kernel = NUTS(Vobs_fit, init_strategy=init_to_median(num_samples=num_samples))
-    mcmc = MCMC(nuts_kernel, num_warmup=2500, num_samples=5000)
+    mcmc = MCMC(nuts_kernel, num_warmup=2500, num_samples=5000, progress_bar=True)
     mcmc.run(random.PRNGKey(0), table, i_table, data, bulged, profile=profile)
     mcmc.print_summary()
     samples = mcmc.get_samples()
