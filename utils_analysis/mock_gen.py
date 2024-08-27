@@ -9,7 +9,7 @@ import jax.random as random
 from numpyro.infer import MCMC, NUTS, init_to_median
 
 from .params import pbul, pdisk, a0, num_samples
-from .Vobs_fits import Vobs_fit
+from .Vobs_fits import Vobs_fit, BIC_from_samples
 
 
 # Sample Vbar squared with uncertainties in M/L ratios, luminosities and distances.
@@ -73,8 +73,11 @@ def Vobs_scat_corr(Vobs, errV, num_samples=num_samples):
 # Fit LCDM mock data (NFW halo profile) to Vobs array.
 def LCDM_Vobs(table, i_table, data, bulged, profile="NFW"):
     nuts_kernel = NUTS(Vobs_fit, init_strategy=init_to_median(num_samples=num_samples))
-    mcmc = MCMC(nuts_kernel, num_warmup=2500, num_samples=5000, progress_bar=True)
+    mcmc = MCMC(nuts_kernel, num_warmup=10000, num_samples=20000, progress_bar=True)
     mcmc.run(random.PRNGKey(0), table, i_table, data, bulged, profile=profile)
     mcmc.print_summary()
     samples = mcmc.get_samples()
+    log_likelihood = samples.pop("log_likelihood")
+
+    print(f"BIC: {BIC_from_samples(samples, log_likelihood)}")
     return samples
