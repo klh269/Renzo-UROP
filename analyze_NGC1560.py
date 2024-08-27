@@ -2,6 +2,9 @@
 """
 Correlation coefficients + dynamic time warping on GP residuals of NGC 1560,
 taking into account uncertainties (Vbar) and Vobs scattering (errV).
+
+The following paper (Broeils 1992) analyzes NGC 1560 in some detail, thus might be useful:
+https://articles.adsabs.harvard.edu/cgi-bin/nph-iarticle_query?bibcode=1992A%26A...256...19B&db_key=AST&page_ind=0&plate_select=NO&data_type=GIF&type=SCREEN_GIF&classic=YES
 """
 
 import jax.experimental
@@ -19,25 +22,27 @@ import math
 import jax
 from jax import vmap
 import jax.random as random
-
-from anal_utils.gp_utils import model, predict, run_inference
 import corner
-from anal_utils.dtw_utils import dtw
 import numpyro
+
+from utils_analysis.gp_utils import model, predict, run_inference
+from utils_analysis.dtw_utils import dtw
+from utils_analysis.Vobs_fits import Vbar_sq, MOND_Vobs
+from utils_analysis.mock_gen import LCDM_Vobs
+# from utils_analysis.mock_gen import Vbar_sq_unc, MOND_unc
 
 matplotlib.use("Agg")  # noqa: E402
 
 
 make_plots = True
-do_DTW = True
-do_correlations = True
+do_DTW = False
+do_correlations = False
 
-fileloc = "/mnt/users/koe/plots/NGC1560/"
-num_samples = 100
+fileloc = "/mnt/users/koe/plots/NGC1560/"   # Directory for saving plots.
 
 
 # Main code to run.
-def main(args, g, r, Y, rad): 
+def main(args, g, r, Y, rad, Vmax):
     """
     Do inference for Vbar with uniform prior for correlation length,
     then apply the resulted lengthscale to Vobs (both real and mock data).
@@ -133,7 +138,7 @@ def main(args, g, r, Y, rad):
         mats_dir = [ "data", "MOND", "LCDM" ]
         
         # DTW!
-        for j in range(2):
+        for j in range(3):
             path, cost_mat = dtw(dist_mats[j])
             x_path, y_path = zip(*path)
             cost = cost_mat[ len(r)-1, len(r)-1 ]
@@ -227,8 +232,6 @@ def main(args, g, r, Y, rad):
                 ax0.set_ylabel("Velocities (km/s)")
 
                 for j in range(4):
-                    if j == 2:
-                        continue
                     if j == 0:
                         ax0.errorbar(r, Y[j], data["errV"], color=colours[j], alpha=0.3, ls='none', fmt='o', capsize=2.5)
                     else:
@@ -236,6 +239,11 @@ def main(args, g, r, Y, rad):
                         ax0.scatter(r, Y[j], color=colours[j], alpha=0.3)
                     # Plot mean prediction from GP.
                     ax0.plot(rad, mean_prediction[j], color=colours[j], label=v_comps[j])
+
+                    # if j == 2:
+                    #     ylow, yhigh = np.percentile(nfw_samples["Vpred"]/Vmax, [16.0, 84.0], axis=0)
+                    #     ax0.fill_between(r, ylow, yhigh, color=colours[j], alpha=0.3)
+
                     # Fill in 1-sigma (68%) confidence band of GP fit.
                     ax0.fill_between(rad, percentiles[j][0, :], percentiles[j][1, :], color=colours[j], alpha=0.2)
 
@@ -244,8 +252,6 @@ def main(args, g, r, Y, rad):
 
                 ax1.set_ylabel(der_axis[der])
                 for j in range(4):
-                    if j == 2:
-                        continue
                     if der == 0:
                         ax1.scatter(r, residuals[j], color=colours[j], alpha=0.3)
                     ax1.plot(rad, res_fits[der][j], color=colours[j], label=v_comps[j])
@@ -257,7 +263,7 @@ def main(args, g, r, Y, rad):
                 
                 vel_comps = [ "Data", "MOND", r"$\Lambda$CDM" ]
 
-                for j in range(2):
+                for j in range(3):
                     # Plot correlations and Vbar/Vobs.
                     ax2.plot(rad[10:], correlations_r[j][der][0], color=colours[j], label=vel_comps[j]+r": Spearman $\rho$")
                     ax2.plot(rad[10:], correlations_r[j][der][1], ':', color=colours[j], label=vel_comps[j]+r": Pearson $\rho$")
@@ -330,8 +336,6 @@ def main(args, g, r, Y, rad):
                     ax0.set_ylabel("Velocities (km/s)")
 
                     for j in range(4):
-                        if j == 2:
-                            continue
                         # Scatter plot for data/mock data points.
                         ax0.scatter(r, Y[j], color=colours[j], alpha=0.3)
                         # Plot mean prediction from GP.
@@ -344,8 +348,6 @@ def main(args, g, r, Y, rad):
 
                     ax1.set_ylabel(der_axis[der])
                     for j in range(4):
-                        if j == 2:
-                            continue
                         if der == 0:
                             ax1.scatter(r, residuals[j], color=colours[j], alpha=0.3)
                         ax1.plot(rad, res_fits[der][j], color=colours[j], label=v_comps[j])
@@ -355,7 +357,7 @@ def main(args, g, r, Y, rad):
                     ax2.set_xlabel(r'Normalised radius ($\times R_{eff}$)')
                     ax2.set_ylabel("Correlations")
 
-                    for j in range(2):
+                    for j in range(3):
                         # Plot correlations and Vbar/Vobs.
                         ax2.plot(rad[50:wmax], correlations_w[j][der][0], color=colours[j], label=vel_comps[j]+r": Spearman $\rho$")
                         ax2.plot(rad[50:wmax], correlations_w[j][der][1], ':', color=colours[j], label=vel_comps[j]+r": Pearson $\rho$")
@@ -400,93 +402,10 @@ if __name__ == "__main__":
     numpyro.set_platform(args.device)
     numpyro.set_host_device_count(args.num_chains)
 
-
-    # Define constants
-    G = 4.300e-6    # Gravitational constant G (kpc (km/s)^2 solarM^(-1))
-    pdisk = 0.5
-    pbul = 0.7
-    a0 = 1.2e-10 / 3.24e-14     # Scale acceleration for MOND in pc/yr^2
-
-    # Calculate baryonic matter from data of individual galaxies.
-    def Vbar(arr):
-        v = np.sqrt( arr["Vgas"]**2
-                    + (arr["Vst"]**2 * pdisk) )
-        return v
-    
-        # Sample Vbar squared with uncertainties in M/L ratios, luminosities and distances.
-    def Vbar_sq_unc(table, i_table, data, bulged=False, num_samples=num_samples):
-        # Sample mass-to-light ratios
-        dist_pdisk = np.random.normal(pdisk, 0.125, size=num_samples)
-        dist_pgas = np.random.normal(1., 0.04, size=num_samples)
-        if bulged:
-            dist_pbul = np.random.normal(pbul, 0.175, size=num_samples)
-        else:
-            dist_pbul = np.zeros(num_samples)
-
-        # Sample luminosity
-        L36 = stats.truncnorm.rvs(-table["L"][i_table] / table["e_L"][i_table], np.inf, table["L"][i_table], table["e_L"][i_table], size=num_samples)
-        dist_pdisk *= L36 / table["L"][i_table]
-        dist_pbul *= L36 / table["L"][i_table]
-
-        # Sample distance to the galaxy
-        galdist = stats.truncnorm.rvs(-table["D"][i_table] / table["e_D"][i_table], np.inf, table["D"][i_table], table["e_D"][i_table], size=num_samples)
-        dist_scale = galdist / table["D"][i_table]
-        dist_scaling = np.full((len(data["Vdisk"]), num_samples), dist_scale)
-
-        dist_pdisk = np.array([dist_pdisk] * len(data["Vdisk"]))
-        dist_pbul = np.array([dist_pbul] * len(data["Vbul"]))
-        dist_pgas = np.array([dist_pgas] * len(data["Vgas"]))
-
-        Vdisk = np.array([data["Vdisk"]] * num_samples).T
-        Vbul = np.array([data["Vbul"]] * num_samples).T
-        Vgas = np.array([data["Vgas"]] * num_samples).T
-
-        Vbar_squared = (dist_pdisk * Vdisk**2
-                        + dist_pbul * Vbul**2
-                        + dist_pgas * Vgas**2)
-        Vbar_squared *= dist_scaling
-
-        return Vbar_squared
-
-    
-    def MOND_unc(Vbar2_unc, num_samples=num_samples):
-        r_unc = np.array([r] * num_samples).T
-        acc = Vbar2_unc / r_unc
-        y = acc / a0
-        nu = 1 + np.sqrt((1 + 4/y))
-        nu /= 2
-
-        return np.sqrt(acc * nu * r_unc)
-    
-    # def LCDM_unc(Vbar2_unc, i_table, num_samples=num_samples):
-    #     vDM_unc = np.array([v_DM[i_table]] * num_samples).T
-    #     return np.sqrt(Vbar2_unc + vDM_unc**2)
-
-    # Scatter a Vobs array with Gaussian noise of width data["errV"].
-    def Vobs_scat(Vobs, errV, num_samples=num_samples):
-        errV_copies = np.array([errV] * num_samples).T
-        return np.random.normal(Vobs, errV_copies)
-
-    # Scatter a Vobs array with CORRELATED Gaussian noise of width data["errV"].
-    def Vobs_scat_corr(Vobs, errV, num_samples=num_samples):
-        gaussian_corr = np.abs(np.random.normal(0., 1., size=num_samples))
-        errV_copies = np.array([errV] * num_samples).T
-        errV_copies *= gaussian_corr
-        return np.random.normal(Vobs, errV_copies)
-
-    def MOND_Vobs(arr, a0=a0):
-        # Quadratic solution from MOND simple interpolating function.
-        acc = Vbar(arr)**2 / r
-        y = acc / a0
-        nu = 1 + np.sqrt((1 + 4/y))
-        nu /= 2
-        return np.sqrt(acc * nu * r)
-
     
     galaxy, correlations_ALL = [], []
     dtw_cost = [ [], [], [] ]
     norm_cost = [ [], [], [] ]
-
 
     """
     Plotting galaxy rotation curves directly from data with variables:
@@ -494,21 +413,35 @@ if __name__ == "__main__":
     """
     file_path = "/mnt/users/koe/data/NGC1560.dat"
     rawdata = np.loadtxt(file_path)
-    columns = [ "R", "V", "errV", "Sdst",
-                "Vst", "Sdgas", "Vgas", "Vgth" ]
+    columns = [ "Rad", "Vobs", "errV", "Sdst",
+                "Vdisk", "Sdgas", "Vgas", "Vgth" ]
     data = pd.DataFrame(rawdata, columns=columns)
-    r = data["R"]
+    r = data["Rad"]
+    r /= 1.3    # Scale length of NGC 1560 according to Broeils.
+    bulged = False
 
+    table = { "D":[2.99], "e_D":[0.1], "Inc":[82.0], "e_Inc":[1.0] }
+    i_table = 0
 
     # Normalise velocities by Vmax = max(Vobs) from SPARC data.
-    # v_components = np.array([data["V"], MOND_Vobs(data), v_LCDM, Vbar(data) ])
-    v_components = np.array([ data["V"], MOND_Vobs(data), MOND_Vobs(data), Vbar(data) ])
-    # Vmax = max(v_components[1])
-    # v_components /= Vmax
+    Vbar_squared = Vbar_sq(data, bulged)
+    nfw_samples = LCDM_Vobs(table, i_table, data, bulged)
+    v_LCDM = np.median(nfw_samples["Vpred"], axis=0)
+
+    if make_plots:
+        labels = ["Distance", "Rc", "rho0", "Disk M/L"]
+        samples_arr = np.vstack([nfw_samples[label] for label in labels]).T
+        fig = corner.corner(samples_arr, show_titles=True, labels=labels, title_fmt=".3f", quantiles=[0.16, 0.5, 0.84], smooth=1)
+        fig.savefig(fileloc+"corner_NFW.png", dpi=300, bbox_inches="tight")
+        plt.close(fig)
+    
+    v_components = np.array([ data["Vobs"], MOND_Vobs(r, Vbar_squared), v_LCDM, np.sqrt(Vbar_squared) ])
+    Vmax = max(v_components[0])
+    data["errV"] /= Vmax
+    v_components /= Vmax
 
     rad_count = math.ceil((max(r)-min(r))*100)
     rad = np.linspace(min(r), max(r), rad_count)
 
-
-    main(args, "NGC1560", r.to_numpy(), v_components, rad)
+    main(args, "NGC1560", r.to_numpy(), v_components, rad, Vmax)
     print("\nMax memory usage: %s (kb)" %getrusage(RUSAGE_SELF).ru_maxrss)
