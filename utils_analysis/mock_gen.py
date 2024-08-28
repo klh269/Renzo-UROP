@@ -71,7 +71,7 @@ def Vobs_scat_corr(Vobs, errV, num_samples=num_samples):
 
 
 # Fit LCDM mock data (NFW halo profile) to Vobs array.
-def LCDM_Vobs(table, i_table, data, bulged, profile="NFW"):
+def Vobs_MCMC(table, i_table, data, bulged, profile):
     nuts_kernel = NUTS(Vobs_fit, init_strategy=init_to_median(num_samples=num_samples))
     mcmc = MCMC(nuts_kernel, num_warmup=10000, num_samples=20000, progress_bar=True)
     mcmc.run(random.PRNGKey(0), table, i_table, data, bulged, profile=profile)
