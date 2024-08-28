@@ -27,22 +27,22 @@ import numpyro
 
 from utils_analysis.gp_utils import model, predict, run_inference
 from utils_analysis.dtw_utils import dtw
-from utils_analysis.Vobs_fits import Vbar_sq, MOND_Vobs
-from utils_analysis.mock_gen import LCDM_Vobs
+from utils_analysis.Vobs_fits import Vbar_sq
+from utils_analysis.mock_gen import Vobs_MCMC
 # from utils_analysis.mock_gen import Vbar_sq_unc, MOND_unc
 
 matplotlib.use("Agg")  # noqa: E402
 
 
 make_plots = True
-do_DTW = False
-do_correlations = False
+do_DTW = True
+do_correlations = True
 
 fileloc = "/mnt/users/koe/plots/NGC1560/"   # Directory for saving plots.
 
 
 # Main code to run.
-def main(args, g, r, Y, rad, Vmax):
+def main(args, g, r, Y, rad):
     """
     Do inference for Vbar with uniform prior for correlation length,
     then apply the resulted lengthscale to Vobs (both real and mock data).
@@ -233,7 +233,7 @@ def main(args, g, r, Y, rad, Vmax):
 
                 for j in range(4):
                     if j == 0:
-                        ax0.errorbar(r, Y[j], data["errV"], color=colours[j], alpha=0.3, ls='none', fmt='o', capsize=2.5)
+                        ax0.errorbar(r, Y[j], data["errV"][:-4], color=colours[j], alpha=0.3, ls='none', fmt='o', capsize=2.5)
                     else:
                         # Scatter plot for data/mock data points.
                         ax0.scatter(r, Y[j], color=colours[j], alpha=0.3)
@@ -258,7 +258,8 @@ def main(args, g, r, Y, rad, Vmax):
 
                 ax1.grid()
 
-                ax2.set_xlabel(r'Normalised radius ($\times R_{eff}$)')
+                # ax2.set_xlabel(r'Normalised radius ($\times R_{eff}$)')
+                ax2.set_xlabel('Radius (kpc)')
                 ax2.set_ylabel("Correlations")
                 
                 vel_comps = [ "Data", "MOND", r"$\Lambda$CDM" ]
@@ -354,7 +355,8 @@ def main(args, g, r, Y, rad, Vmax):
 
                     ax1.grid()
 
-                    ax2.set_xlabel(r'Normalised radius ($\times R_{eff}$)')
+                    # ax2.set_xlabel(r'Normalised radius ($\times R_{eff}$)')
+                    ax2.set_xlabel('Radius (kpc)')
                     ax2.set_ylabel("Correlations")
 
                     for j in range(3):
@@ -416,8 +418,8 @@ if __name__ == "__main__":
     columns = [ "Rad", "Vobs", "errV", "Sdst",
                 "Vdisk", "Sdgas", "Vgas", "Vgth" ]
     data = pd.DataFrame(rawdata, columns=columns)
-    r = data["Rad"]
-    r /= 1.3    # Scale length of NGC 1560 according to Broeils.
+    r = data["Rad"][:-4]
+    # r /= 1.3    # Scale length of NGC 1560 according to Broeils.
     bulged = False
 
     table = { "D":[2.99], "e_D":[0.1], "Inc":[82.0], "e_Inc":[1.0] }
@@ -425,17 +427,26 @@ if __name__ == "__main__":
 
     # Normalise velocities by Vmax = max(Vobs) from SPARC data.
     Vbar_squared = Vbar_sq(data, bulged)
-    nfw_samples = LCDM_Vobs(table, i_table, data, bulged)
+    nfw_samples = Vobs_MCMC(table, i_table, data, bulged, profile="NFW")
+    mond_samples = Vobs_MCMC(table, i_table, data, bulged, profile="MOND")
     v_LCDM = np.median(nfw_samples["Vpred"], axis=0)
+    v_MOND = np.median(mond_samples["Vpred"], axis=0)
 
     if make_plots:
-        labels = ["Distance", "Rc", "rho0", "Disk M/L"]
+        # labels = ["Distance", "Rc", "rho0", "Disk M/L"]
+        labels = [ "Distance", "Disk M/L", "logM200c", "logc" ]
         samples_arr = np.vstack([nfw_samples[label] for label in labels]).T
         fig = corner.corner(samples_arr, show_titles=True, labels=labels, title_fmt=".3f", quantiles=[0.16, 0.5, 0.84], smooth=1)
         fig.savefig(fileloc+"corner_NFW.png", dpi=300, bbox_inches="tight")
         plt.close(fig)
+
+        labels = [ "Distance", "Disk M/L" ]
+        samples_arr = np.vstack([mond_samples[label] for label in labels]).T
+        fig = corner.corner(samples_arr, show_titles=True, labels=labels, title_fmt=".3f", quantiles=[0.16, 0.5, 0.84], smooth=1)
+        fig.savefig(fileloc+"corner_MOND.png", dpi=300, bbox_inches="tight")
+        plt.close(fig)
     
-    v_components = np.array([ data["Vobs"], MOND_Vobs(r, Vbar_squared), v_LCDM, np.sqrt(Vbar_squared) ])
+    v_components = np.array([ data["Vobs"], v_MOND, v_LCDM, np.sqrt(Vbar_squared) ])[:,:-4]
     Vmax = max(v_components[0])
     data["errV"] /= Vmax
     v_components /= Vmax
@@ -443,5 +454,5 @@ if __name__ == "__main__":
     rad_count = math.ceil((max(r)-min(r))*100)
     rad = np.linspace(min(r), max(r), rad_count)
 
-    main(args, "NGC1560", r.to_numpy(), v_components, rad, Vmax)
+    main(args, "NGC1560", r.to_numpy(), v_components, rad)
     print("\nMax memory usage: %s (kb)" %getrusage(RUSAGE_SELF).ru_maxrss)
