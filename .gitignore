@@ -1,3 +1,6 @@
 
 test.py
 *.pyc
+/data
+/gp_fits
+/slurm_output
