@@ -36,7 +36,7 @@ def model(X, Y, vr=0, ls=0, ns=0):
         var = vr
 
     if ls == 0:
-        length = numpyro.sample("length", dist.Uniform(1., max(X)))
+        length = numpyro.sample("length", dist.Uniform(max(X)/2., max(X)))
     else:
         length = ls
     
