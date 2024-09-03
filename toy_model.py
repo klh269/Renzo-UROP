@@ -7,7 +7,7 @@ to better understand the effect/restriction of feature sizes and noise/uncertain
 import numpy as np
 from scipy import stats, interpolate
 import matplotlib.pyplot as plt
-# from tqdm import tqdm
+from tqdm import tqdm
 
 from utils_analysis.dtw_utils import dtw
 
@@ -17,13 +17,17 @@ corr_radii  = True
 corr_window = True
 
 fileloc = "/mnt/users/koe/plots/toy_model/"
+colors = [ 'k', 'tab:red' ]
+labels = [ 'Vobs', 'Vbar' ]
+deriv_dir = [ "d0", "d1", "d2" ]
+color_bar = "orange"
 
 # Generate Gaussian featurs.
 bump_loc    = 5.0
 bump_FWHM   = 0.5
-bump_size   = 0.1
-noise       = 0.02
-bar_ratio   = 0.7
+bump_size   = 0.2
+noise       = 0.03
+bar_ratio   = np.linspace(0.75, 0.5, 100)
 
 rad = np.linspace(0., 10., 100)
 
@@ -113,20 +117,15 @@ if corr_radii:
             rad_corr[der][0].append(stats.spearmanr(res_fits[der][0][:j], res_fits[der][1][:j])[0])
             rad_corr[der][1].append(stats.pearsonr(res_fits[der][0][:j], res_fits[der][1][:j])[0])
 
-    # # Compute baryonic dominance, i.e. average Vbar/Vobs(data) from centre to some max radius.
-    # bar_ratio = []
-    # for rd in tqdm(range(len(rad))):
-    #     bar_ratio.append(sum(Vraw[1][:rd]/Vraw[0][:rd]) / (rd+1))
+    # Compute baryonic dominance, i.e. average Vbar/Vobs(data) from centre to some max radius.
+    bar_ratio = []
+    for rd in tqdm(range(len(rad))):
+        bar_ratio.append(sum(v_werr[1][:rd]/v_werr[0][:rd]) / (rd+1))
 
 
     """
     Plot GP fits, residuals (+ PCHIP) and correlations.
     """
-    colors = [ 'k', 'tab:red' ]
-    labels = [ 'Vobs', 'Vbar' ]
-    deriv_dir = [ "d0", "d1", "d2" ]
-    # color_bar = "orange"
-
     for der in range(1):
         fig, (ax0, ax1, ax2) = plt.subplots(3, 1, sharex=True, gridspec_kw={'height_ratios': [5, 2, 3]})
         fig.set_size_inches(7, 7)
@@ -153,14 +152,14 @@ if corr_radii:
         # Plot correlations and Vbar/Vobs.
         ax2.plot(rad[10:], rad_corr[der][0], color='mediumblue', label=r"Spearman $\rho$")
         ax2.plot(rad[10:], rad_corr[der][1], ':', color='mediumblue', label=r"Pearson $\rho$")
-        # ax2.plot([], [], ' ', label=r": $\rho_s=$"+str(round(stats.spearmanr(rad_corr[der][0], bar_ratio[10:])[0], 3))+r", $\rho_p=$"+str(round(stats.pearsonr(rad_corr[der][1], bar_ratio[10:])[0], 3)))
-
-        # ax5 = ax2.twinx()
-        # ax5.set_ylabel(r'Average $v_{bar}/v_{obs}$')
-        # ax5.plot(rad[10:], bar_ratio[10:], '--', color=color_bar, label="Vbar/Vobs")
-        # ax5.tick_params(axis='y', labelcolor=color_bar)
-
-        ax2.legend(loc="upper left", bbox_to_anchor=(1,1))
+        ax2.plot([], [], ' ', label=r": $\rho_s=$"+str(round(stats.spearmanr(rad_corr[der][0], bar_ratio[10:])[0], 3))+r", $\rho_p=$"+str(round(stats.pearsonr(rad_corr[der][1], bar_ratio[10:])[0], 3)))
+    
+        ax5 = ax2.twinx()
+        ax5.set_ylabel(r'Average $v_{bar}/v_{obs}$')
+        ax5.plot(rad[10:], bar_ratio[10:], '--', color=color_bar, label="Vbar/Vobs")
+        ax5.tick_params(axis='y', labelcolor=color_bar)
+    
+        ax2.legend(loc="upper left", bbox_to_anchor=(1.11, 1))
         ax2.grid()
 
         plt.subplots_adjust(hspace=0.05)
@@ -188,6 +187,11 @@ if corr_window:
         # win_corr[der][0] = signal.savgol_filter(win_corr[der][0], 5, 2)
         # win_corr[der][1] = signal.savgol_filter(win_corr[der][1], 5, 2)
         
+    # Compute average baryonic dominance (using Vobs from SPARC data) in moving window.
+    wbar_ratio = []
+    for j in tqdm(range(5, wmax)):
+        wbar_ratio.append( sum( v_werr[1][j-5:j+5] / v_werr[0][j-5:j+5] ) / 11 )
+    
 
     # Plot corrletaions as 1 main plot + 1 subplot, using only Vobs from data for Vbar/Vobs.
     for der in range(1):
@@ -217,14 +221,14 @@ if corr_window:
         # Plot correlations and Vbar/Vobs.
         ax2.plot(rad[5:wmax], win_corr[der][0], color='mediumblue', label=r"Spearman $\rho$")
         ax2.plot(rad[5:wmax], win_corr[der][1], ':', color='mediumblue', label=r"Pearson $\rho$")
-        # ax2.plot([], [], ' ', label=r": $\rho_s=$"+str(round(stats.spearmanr(correlations_w[j][der][0], wbar_ratio)[0], 3))+r", $\rho_p=$"+str(round(stats.pearsonr(correlations_w[j][der][1], wbar_ratio)[0], 3)))
-
-        # ax5 = ax2.twinx()
-        # ax5.set_ylabel(r'Average $v_{bar}/v_{obs}$')
-        # ax5.plot(rad[50:wmax], wbar_ratio, '--', color=color_bar, label="Vbar/Vobs")
-        # ax5.tick_params(axis='y', labelcolor=color_bar)
+        ax2.plot([], [], ' ', label=r": $\rho_s=$"+str(round(stats.spearmanr(win_corr[der][0], wbar_ratio)[0], 3))+r", $\rho_p=$"+str(round(stats.pearsonr(win_corr[der][1], wbar_ratio)[0], 3)))
+    
+        ax5 = ax2.twinx()
+        ax5.set_ylabel(r'Average $v_{bar}/v_{obs}$')
+        ax5.plot(rad[5:wmax], wbar_ratio, '--', color=color_bar, label="Vbar/Vobs")
+        ax5.tick_params(axis='y', labelcolor=color_bar)
         
-        ax2.legend(loc="upper left", bbox_to_anchor=(1,1))
+        ax2.legend(loc="upper left", bbox_to_anchor=(1.11, 1))
         ax2.grid()
 
         plt.subplots_adjust(hspace=0.05)
