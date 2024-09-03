@@ -455,4 +455,3 @@ if __name__ == "__main__":
     rad = np.linspace(min(r), max(r), rad_count)
 
     main(args, "NGC1560", r.to_numpy(), v_components, rad)
-    print("\nMax memory usage: %s (kb)" %getrusage(RUSAGE_SELF).ru_maxrss)
