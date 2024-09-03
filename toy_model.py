@@ -152,7 +152,7 @@ if corr_radii:
         # Plot correlations and Vbar/Vobs.
         ax2.plot(rad[10:], rad_corr[der][0], color='mediumblue', label=r"Spearman $\rho$")
         ax2.plot(rad[10:], rad_corr[der][1], ':', color='mediumblue', label=r"Pearson $\rho$")
-        ax2.plot([], [], ' ', label=r": $\rho_s=$"+str(round(stats.spearmanr(rad_corr[der][0], bar_ratio[10:])[0], 3))+r", $\rho_p=$"+str(round(stats.pearsonr(rad_corr[der][1], bar_ratio[10:])[0], 3)))
+        ax2.plot([], [], ' ', label=r"$\rho_s=$"+str(round(stats.spearmanr(rad_corr[der][0], bar_ratio[10:])[0], 3))+r", $\rho_p=$"+str(round(stats.pearsonr(rad_corr[der][1], bar_ratio[10:])[0], 3)))
     
         ax5 = ax2.twinx()
         ax5.set_ylabel(r'Average $v_{bar}/v_{obs}$')
@@ -221,7 +221,7 @@ if corr_window:
         # Plot correlations and Vbar/Vobs.
         ax2.plot(rad[5:wmax], win_corr[der][0], color='mediumblue', label=r"Spearman $\rho$")
         ax2.plot(rad[5:wmax], win_corr[der][1], ':', color='mediumblue', label=r"Pearson $\rho$")
-        ax2.plot([], [], ' ', label=r": $\rho_s=$"+str(round(stats.spearmanr(win_corr[der][0], wbar_ratio)[0], 3))+r", $\rho_p=$"+str(round(stats.pearsonr(win_corr[der][1], wbar_ratio)[0], 3)))
+        ax2.plot([], [], ' ', label=r"$\rho_s=$"+str(round(stats.spearmanr(win_corr[der][0], wbar_ratio)[0], 3))+r", $\rho_p=$"+str(round(stats.pearsonr(win_corr[der][1], wbar_ratio)[0], 3)))
     
         ax5 = ax2.twinx()
         ax5.set_ylabel(r'Average $v_{bar}/v_{obs}$')
