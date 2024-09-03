@@ -18,20 +18,25 @@ corr_window = True
 
 fileloc = "/mnt/users/koe/plots/toy_model/"
 
+# Generate Gaussian featurs.
+bump_loc    = 5.0
+bump_FWHM   = 0.5
+bump_size   = 0.1
+noise       = 0.02
+bar_ratio   = 0.7
+
 rad = np.linspace(0., 10., 100)
-bar_ratio = 0.7
 
 Vobs = np.arctan(rad)
 Vobs /= max(Vobs)
 Vbar = Vobs * bar_ratio
-
 Vraw = np.array([ Vobs, Vbar ])
 
-bump = 0.1 * stats.norm.pdf(rad, 5.0, 0.25)
+bump_FWHM /= 2.0
+bump = bump_size * bump_FWHM * np.sqrt(2*np.pi) * stats.norm.pdf(rad, bump_loc, bump_FWHM)
 features = np.array([ 1.0 * bump, 1.0 * bar_ratio * bump ])
 velocities = Vraw + features
 
-noise = 0.02
 v_werr = np.random.normal(velocities, noise)
 residuals = v_werr - (velocities - features)
 
