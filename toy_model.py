@@ -16,8 +16,8 @@ from utils_analysis.Vobs_fits import MOND_vsq
 
 # Switches for running different parts of the analysis.
 do_DTW      = True
-corr_radii  = True
-corr_window = True
+corr_radii  = False
+corr_window = False
 make_plots  = True
 
 fileloc = "/mnt/users/koe/plots/toy_model/"
@@ -34,7 +34,7 @@ bump_sigma  = bump_FWHM / (2.0 * np.sqrt(2.0 * np.log(2.0)))
 rad = np.linspace(10., 0., 100, endpoint=False)[::-1]   # Defined this way to exclude the starting point r=0.
 noise_arr = np.linspace(0.0, bump_size/2, 101, endpoint=True)
 win_spearmans, win_pearsons = [], []
-dtw_costs = []
+dtw_costs, Xft_costs = [], []
 
 
 for noise in tqdm(noise_arr):
@@ -59,6 +59,10 @@ for noise in tqdm(noise_arr):
     Vraw = np.array([ Vobs_raw, Vbar_raw ]) / Vmax
     residuals = v_werr - Vraw
 
+    # Vobs residuals due to pure noise, i.e. smooth RC without feature.
+    res_Xft = np.random.normal(Vobs_raw, noise) - Vobs_raw
+    res_Xft /= Vmax
+
     # Interpolate the residuals with cubic Hermite spline splines.
     v_d0, v_d1, v_d2 = [], [], []
     for v_comp in residuals:
@@ -73,13 +77,58 @@ for noise in tqdm(noise_arr):
     DTW on GP residuals.
     """
     if do_DTW:
-        # print("Warping time dynamically... or something like that...")        
+        # print("Warping time dynamically... or something like that...")   
+        MOND_res = (vel_MOND - Vobs_raw) / Vmax
+
+        dist_Xft = np.zeros((len(rad), len(rad)))
+        for n in range(len(rad)):
+            for m in range(len(rad)):
+                dist_Xft[n, m] = abs(res_Xft[n] - MOND_res[m])
+        
+        # DTW!
+        path, cost_mat = dtw(dist_Xft)
+        x_path, y_path = zip(*path)
+        Xft_cost = cost_mat[ len(rad)-1, len(rad)-1 ]
+        Xft_cost /= (len(rad) * 2)
+        Xft_costs.append(Xft_cost)
+
+        if make_plots and noise in noise_arr[::10]:
+            # Plot distance matrix and cost matrix with optimal path.
+            plt.title("Dynamic time warping: Toy model (w/o feature)")
+            plt.axis('off')
+
+            plt.subplot(121)
+            plt.title("Distance matrix")
+            plt.imshow(dist_Xft, cmap=plt.cm.binary, interpolation="nearest", origin="lower")
+
+            plt.subplot(122)
+            plt.title("Cost matrix")
+            plt.imshow(cost_mat, cmap=plt.cm.binary, interpolation="nearest", origin="lower")
+            plt.plot(x_path, y_path)
+
+            plt.savefig(fileloc+f"Xft_matrix/ratio={round(noise/bump_size, 2)}.png", dpi=300, bbox_inches="tight")
+            plt.close()
+
+            # Visualize DTW alignment.
+            plt.title("DTW alignment: Toy model (w/o feature)")
+
+            diff = abs(max(MOND_res) - min(res_Xft))
+            for x_i, y_j in path:
+                plt.plot([x_i, y_j], [res_Xft[x_i] + diff, MOND_res[y_j] - diff], c="C7", alpha=0.4)
+            plt.plot(np.arange(len(rad)), np.array(res_Xft) + diff, c='k', label="Vobs")
+            plt.plot(np.arange(len(rad)), np.array(MOND_res) - diff, c="red", label="Vbar")
+            plt.plot([], [], c='w', label="Normalized cost = {:.4f}".format(Xft_cost))
+
+            plt.axis("off")
+            plt.legend(bbox_to_anchor=(1,1))
+            plt.savefig(fileloc+f"Xft_alignment/ratio={round(noise/bump_size, 2)}.png", dpi=300, bbox_inches="tight")
+            plt.close()
+     
         # Construct distance matrices.
         dist_data = np.zeros((len(rad), len(rad)))
         for n in range(len(rad)):
             for m in range(len(rad)):
                 # Define new distance matrix construction s.t. cost = 0 for MOND (w/o noise).
-                MOND_res = (vel_MOND - Vobs_raw) / Vmax
                 dist_data[n, m] = abs(residuals[0][n] - MOND_res[m])
                 # dist_data[n, m] = abs(residuals[0][n] - residuals[1][m])
 
@@ -87,7 +136,8 @@ for noise in tqdm(noise_arr):
         path, cost_mat = dtw(dist_data)
         x_path, y_path = zip(*path)
         cost = cost_mat[ len(rad)-1, len(rad)-1 ]
-        dtw_costs.append(cost)
+        norm_cost = cost / (len(rad) * 2)
+        dtw_costs.append(norm_cost)
 
         if make_plots and noise in noise_arr[::10]:
             # Plot distance matrix and cost matrix with optimal path.
@@ -112,10 +162,10 @@ for noise in tqdm(noise_arr):
             diff = abs(max(MOND_res) - min(residuals[0]))
             for x_i, y_j in path:
                 plt.plot([x_i, y_j], [residuals[0][x_i] + diff, MOND_res[y_j] - diff], c="C7", alpha=0.4)
-            plt.plot(np.arange(len(rad)), np.array(residuals[0]) + diff, c='k', label="Vobs")
+            plt.plot(np.arange(len(rad)), np.array(residuals[0]) + diff, c='darkblue', label="Vobs")
             plt.plot(np.arange(len(rad)), np.array(MOND_res) - diff, c="red", label="Vbar")
             plt.plot([], [], c='w', label="Alignment cost = {:.4f}".format(cost))
-            plt.plot([], [], c='w', label="Normalized cost = {:.4f}".format(cost/(len(rad)*2)))
+            plt.plot([], [], c='w', label="Normalized cost = {:.4f}".format(norm_cost))
 
             plt.axis("off")
             plt.legend(bbox_to_anchor=(1,1))
@@ -266,11 +316,13 @@ for noise in tqdm(noise_arr):
 bump_ratio = noise_arr / bump_size
 
 if do_DTW:
-    plt.title("DTW alignment costs")
-    plt.ylabel("DTW cost")
+    plt.title("Normalized DTW alignment costs")
+    plt.ylabel("Normalized DTW costs")
     plt.xlabel("Noise / feature height")
-    plt.plot(bump_ratio, dtw_costs, color='k')
+    plt.plot(bump_ratio, dtw_costs, color='tab:blue', label="Costs w/ feature")
+    plt.plot(bump_ratio, Xft_costs, '--', color='k', label="Costs w/o feature")
 
+    plt.legend()
     plt.savefig(fileloc+"dtwVnoise.png", dpi=300, bbox_inches="tight")
     plt.close()
 
