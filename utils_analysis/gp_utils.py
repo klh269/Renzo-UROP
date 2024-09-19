@@ -56,7 +56,7 @@ def model(X, Y, vr=0, ls=0, ns=0):
 
 
 # helper function for doing hmc inference
-def run_inference(model, args, rng_key, X, Y, vr=0, ls=0, ns=0):
+def run_inference(model, args, rng_key, X, Y, vr=0, ls=0, ns=0, summary:bool=True):
     start = time.time()
     # demonstrate how to use different HMC initialization strategies
     if args.init_strategy == "median":
@@ -77,7 +77,7 @@ def run_inference(model, args, rng_key, X, Y, vr=0, ls=0, ns=0):
         progress_bar=args.testing,
     )
     mcmc.run(rng_key, X, Y, vr, ls, ns)
-    if (vr, ls, ns) == (0, 0, 0):
+    if (vr, ls, ns) == (0, 0, 0) and summary:
         mcmc.print_summary()
         print("\nMCMC elapsed time:", time.time() - start)
     return mcmc.get_samples()
