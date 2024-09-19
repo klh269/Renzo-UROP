@@ -51,7 +51,7 @@ def dtw(dist_mat):
     return (path[::-1], cost_mat)
 
 
-def do_DTW(itr:int, length:int, arr1, arr2, max_index:int, window:bool, make_plots=False, file_names=""):
+def do_DTW(itr:int, length:int, arr1, arr2, window:bool, make_plots=False, file_names=""):
     # arr1 and arr2 are 2D array-like objects of size (iterations x length);
     # this function is to be called within a loop over said iterations.
     # file_names should be a list of strings in the order: [ matrix, alignment ].
@@ -99,18 +99,18 @@ def do_DTW(itr:int, length:int, arr1, arr2, max_index:int, window:bool, make_plo
         # Visualize DTW alignment.
         plt.title("DTW alignment: Toy model")
 
-        diff = abs(max(arr2[max_index]) - min(arr1[max_index]))
+        diff = abs(max(arr2[itr]) - min(arr1[itr]))
 
         if window:
             for x_i, y_j in path_fwd:
-                plt.plot([x_i, y_j], [arr1[max_index][44+x_i] + diff, arr2[max_index][44+y_j] - diff], c="C7", alpha=0.4)
-                plt.plot(np.arange(length), np.array(arr1[max_index][44:55]) + diff, c='darkblue', label="Vobs")
-                plt.plot(np.arange(length), np.array(arr2[max_index][44:55]) - diff, c="red", label="Vbar")
+                plt.plot([x_i, y_j], [arr1[itr][44+x_i] + diff, arr2[itr][44+y_j] - diff], c="C7", alpha=0.4)
+            plt.plot(np.arange(length), np.array(arr1[itr][44:55]) + diff, c='darkblue', label="Vobs")
+            plt.plot(np.arange(length), np.array(arr2[itr][44:55]) - diff, c="red", label="Vbar")
         else:
             for x_i, y_j in path_fwd:
-                plt.plot([x_i, y_j], [arr1[max_index][x_i] + diff, arr2[max_index][y_j] - diff], c="C7", alpha=0.4)
-                plt.plot(np.arange(length), arr1[max_index] + diff, c='k', label="Vobs")
-                plt.plot(np.arange(length), arr2[max_index] - diff, c="red", label="Vbar")
+                plt.plot([x_i, y_j], [arr1[itr][x_i] + diff, arr2[itr][y_j] - diff], c="C7", alpha=0.4)
+            plt.plot(np.arange(length), arr1[itr] + diff, c='k', label="Vobs")
+            plt.plot(np.arange(length), arr2[itr] - diff, c="red", label="Vbar")
 
         plt.plot([], [], c='w', label="Alignment cost = {:.4f}".format(cost))
         plt.plot([], [], c='w', label="Normalized cost = {:.4f}".format(norm_cost))
