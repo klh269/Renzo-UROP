@@ -15,7 +15,7 @@ import numpyro
 import argparse
 
 from resource import getrusage, RUSAGE_SELF
-# from tqdm import tqdm
+from tqdm import tqdm
 
 from utils_analysis.toy_gen import toy_gen
 from utils_analysis.toy_GP import GP_fit, GP_residuals
@@ -25,7 +25,7 @@ matplotlib.use("Agg")
 memory_usage = []   # Track memory usage throughout programme.
 
 # Switches for running different parts of the analysis.
-use_GP      = True
+use_GP      = False
 apply_DTW   = True
 corr_radii  = False     # SET FALSE: Code to be fixed for noise iterations.
 corr_window = False     # SET FALSE: Code to be fixed for noise iterations.
@@ -56,8 +56,7 @@ num_rad = len(rad)
 
 noise_arr = np.linspace(0.0, bump_size, 201, endpoint=True)
 num_noise = len(noise_arr)
-num_iterations = 100    # Iterations per noise level (for smoothing out DTW costs and correlations in final plots).
-max_index = num_iterations - 1  # Useful index for later plots.
+num_iterations = 500    # Iterations per noise level (for smoothing out DTW costs and correlations in final plots).
 
 
 # Initialize arrays for summary plots.
@@ -164,20 +163,20 @@ for i in range(num_noise):
             if itr==0 and noise in noise_arr[::10]:
                 file_names = [ fileloc+f"Xft_matrix/ratio={round(noise/bump_size, 2)}.png",
                                fileloc+f"Xft_alignment/ratio={round(noise/bump_size, 2)}.png" ]
-                Xft_cost = do_DTW(itr, num_rad, res_Xft, MOND_res, max_index, window=False, make_plots=make_plots, file_names=file_names)
+                Xft_cost = do_DTW(itr, num_rad, res_Xft, MOND_res, window=False, make_plots=make_plots, file_names=file_names)
                 Xft_costs[itr][i] = Xft_cost
             else:
-                Xft_cost = do_DTW(itr, num_rad, res_Xft, MOND_res, max_index, window=False)
+                Xft_cost = do_DTW(itr, num_rad, res_Xft, MOND_res, window=False)
                 Xft_costs[itr][i] = Xft_cost
 
         for itr in range(num_iterations):
             if itr==0 and noise in noise_arr[::10]:
                 file_names = [ fileloc+f"dtw_matrix/ratio={round(noise/bump_size, 2)}.png",
                                fileloc+f"dtw_alignment/ratio={round(noise/bump_size, 2)}.png" ]
-                norm_cost = do_DTW(itr, num_rad, res_dtw[0], MOND_res, max_index, window=False, make_plots=make_plots, file_names=file_names)
+                norm_cost = do_DTW(itr, num_rad, res_dtw[0], MOND_res, window=False, make_plots=make_plots, file_names=file_names)
                 dtw_costs[itr][i] = norm_cost
             else:
-                norm_cost = do_DTW(itr, num_rad, res_dtw[0], MOND_res, max_index, window=False)
+                norm_cost = do_DTW(itr, num_rad, res_dtw[0], MOND_res, window=False)
                 dtw_costs[itr][i] = norm_cost
 
 
@@ -190,20 +189,20 @@ for i in range(num_noise):
             if itr==0 and noise in noise_arr[::10]:
                 file_names = [ fileloc+f"dtw_window/Xft_matrix/ratio={round(noise/bump_size, 2)}.png",
                                fileloc+f"dtw_window/Xft_alignment/ratio={round(noise/bump_size, 2)}.png" ]
-                win_cost = do_DTW(itr, window_size, res_Xft, MOND_res, max_index, window=True, make_plots=make_plots, file_names=file_names)
+                win_cost = do_DTW(itr, window_size, res_Xft, MOND_res, window=True, make_plots=make_plots, file_names=file_names)
                 Xft_window[itr][i] = win_cost
             else:
-                win_cost = do_DTW(itr, window_size, res_Xft, MOND_res, max_index, window=True)
+                win_cost = do_DTW(itr, window_size, res_Xft, MOND_res, window=True)
                 Xft_window[itr][i] = win_cost
 
         for itr in range(num_iterations):
             if itr==0 and noise in noise_arr[::10]:
                 file_names = [ fileloc+f"dtw_window/matrix/ratio={round(noise/bump_size, 2)}.png",
                                fileloc+f"dtw_window/alignment/ratio={round(noise/bump_size, 2)}.png" ]
-                win_cost = do_DTW(itr, window_size, res_dtw[0], MOND_res, max_index, window=True, make_plots=make_plots, file_names=file_names)
+                win_cost = do_DTW(itr, window_size, res_dtw[0], MOND_res, window=True, make_plots=make_plots, file_names=file_names)
                 dtw_window[itr][i] = win_cost
             else:
-                win_cost = do_DTW(itr, window_size, res_dtw[0], MOND_res, max_index, window=True)
+                win_cost = do_DTW(itr, window_size, res_dtw[0], MOND_res, window=True)
                 dtw_window[itr][i] = win_cost
 
 
