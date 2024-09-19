@@ -32,7 +32,7 @@ from utils_analysis.Vobs_fits import Vbar_sq
 from utils_analysis.mock_gen import Vobs_MCMC
 # from utils_analysis.mock_gen import Vbar_sq_unc, MOND_unc
 
-matplotlib.use("Agg")  # noqa: E402
+matplotlib.use("Agg")
 
 
 make_plots = True
@@ -441,7 +441,7 @@ if __name__ == "__main__":
         fig.savefig(fileloc+"corner_NFW.png", dpi=300, bbox_inches="tight")
         plt.close(fig)
 
-        labels = [ "Distance", "Disk M/L" ]
+        labels = [ "Distance", "Disk M/L", "a0" ]
         samples_arr = np.vstack([mond_samples[label] for label in labels]).T
         fig = corner.corner(samples_arr, show_titles=True, labels=labels, title_fmt=".3f", quantiles=[0.16, 0.5, 0.84], smooth=1)
         fig.savefig(fileloc+"corner_MOND.png", dpi=300, bbox_inches="tight")
@@ -449,10 +449,21 @@ if __name__ == "__main__":
     
     v_components = np.array([ data["Vobs"], v_MOND, v_LCDM, np.sqrt(Vbar_squared) ])
     Vmax = max(v_components[0])
-    data["errV"] /= Vmax
-    v_components /= Vmax
+    # data["errV"] /= Vmax
+    # v_components /= Vmax
 
     rad_count = math.ceil((max(r)-min(r))*100)
     rad = np.linspace(min(r), max(r), rad_count)
 
     main(args, "FAKE1560", r.to_numpy(), v_components, rad)
+
+    plt.title("Test plot: FAKE1560")
+    plt.ylabel("Velocities (km/s)")
+    plt.xlabel("Radius (kpc)")
+    plt.errorbar(r, data["Vobs"], data["errV"], color='k', ls='none', fmt='o', capsize=2.5, label="Vobs")
+    plt.scatter(r, data["Vgas"]*np.sqrt(1.33), label="Vgas")
+    plt.scatter(r, data["Vdisk"]*np.sqrt(0.1), label="Vdisk")
+
+    plt.legend()
+    plt.grid()
+    plt.savefig(fileloc+"test.png")
