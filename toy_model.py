@@ -15,9 +15,10 @@ import numpyro
 import argparse
 
 from resource import getrusage, RUSAGE_SELF
-from tqdm import tqdm
+# from tqdm import tqdm
 
 from utils_analysis.toy_gen import toy_gen
+from utils_analysis.med_filter import med_filter
 from utils_analysis.toy_GP import GP_fit, GP_residuals
 from utils_analysis.dtw_utils import do_DTW
 
@@ -25,14 +26,20 @@ matplotlib.use("Agg")
 memory_usage = []   # Track memory usage throughout programme.
 
 # Switches for running different parts of the analysis.
+use_MF      = True
 use_GP      = False
 apply_DTW   = True
 corr_radii  = False     # SET FALSE: Code to be fixed for noise iterations.
 corr_window = False     # SET FALSE: Code to be fixed for noise iterations.
 make_plots  = True
 
-
-if use_GP:
+# File names for different analysis methods.
+if use_MF and use_GP:
+        raise Exception("Median filter (MF) and Gaussian process (GP) cannot be used at the same time!")
+elif use_MF:
+    fileloc = "/mnt/users/koe/plots/toy_model/use_MF/"
+    MF_size = 10    # Define window size for median filter (if used).
+elif use_GP:
     fileloc = "/mnt/users/koe/plots/toy_model/use_GP/"
 else:
     fileloc = "/mnt/users/koe/plots/toy_model/"
@@ -50,9 +57,6 @@ bump_size   = 20.0   # Defined in terms of percentage of max(Vbar)
 bump_loc    = 5.0
 bump_FWHM   = 0.5
 bump_sigma  = bump_FWHM / (2.0 * np.sqrt(2.0 * np.log(2.0)))
-
-rad = np.linspace(10., 0., 100, endpoint=False)[::-1]   # Defined this way to exclude the starting point r=0.
-num_rad = len(rad)
 
 noise_arr = np.linspace(0.0, bump_size, 201, endpoint=True)
 num_noise = len(noise_arr)
@@ -99,15 +103,33 @@ MAIN LOOP.
 for i in range(num_noise):
     if i%10 == 0:
         print(f"Running iteration {i}/{num_noise}...")
+
+    rad = np.linspace(10., 0., 100, endpoint=False)[::-1]   # Defined this way to exclude the starting point r=0.
+    num_rad = len(rad)
     
     noise = noise_arr[i]
     bump, Vraw, Vraw_werr, v_werr, residuals, res_Xft, MOND_res = toy_gen(rad, bump_loc, bump_size, bump_sigma, noise, num_iterations)
 
-    # Transpose residuals array for DTW:
-    # 3D array of size num_iterations x 2 (vel) x 100 (rad) --> 2 x num_iterations x 100 (rad).
-    res_dtw = np.transpose(residuals, (1, 0, 2))
+
+    # Apply simple median filter.
+    if use_MF:
+        file_name = fileloc+f"MF_fits/ratio={round(noise/bump_size, 2)}.png"
+        Xft_fname = fileloc+f"MF_fits/Xft/ratio={round(noise/bump_size, 2)}.png"
+        
+        if noise in noise_arr[::10]:
+            _, residuals = med_filter(rad, v_werr, size=MF_size, make_plots=make_plots, file_name=file_name)
+            _, residuals_Xft = med_filter(rad, Vraw_werr, size=MF_size, make_plots=make_plots, file_name=Xft_fname)
+        else:
+            _, residuals = med_filter(rad, v_werr, size=MF_size)
+            _, residuals_Xft = med_filter(rad, Vraw_werr, size=MF_size)
+        
+        residuals = residuals[:,:,5:-5]
+        residuals_Xft = residuals_Xft[:,:,5:-5]
+        rad = rad[5:-5]
+        num_rad -= 10
 
 
+    # Apply GP regression.
     if use_GP:
         residuals, residuals_Xft = [], []
         file_names = [ fileloc+f"corner_plots/ratio={round(noise/bump_size, 2)}.png",
@@ -132,12 +154,18 @@ for i in range(num_noise):
                 residuals.append( GP_residuals(rad, v_werr[itr], rad, pred_means, pred_bands) )
                 residuals_Xft.append( GP_residuals(rad, Vraw_werr[itr], rad, Xft_means, Xft_bands) )
 
-        res_dtw = np.transpose(residuals, (1, 0, 2))
+
+    # Transpose residuals arrays and extract required Xft residuals for DTW:
+    # Transpose: 3D array of size num_iterations x 2 (vel) x 100 (rad) --> 2 x num_iterations x 100 (rad).
+    res_dtw = np.transpose(residuals, (1, 0, 2))
+
+    if use_MF or use_GP:
         residuals_Xft = np.transpose(residuals_Xft, (1, 0, 2))
         res_Xft = np.array(residuals_Xft[0])
         MOND_res = np.array(residuals_Xft[1])
 
 
+    # Interpolate residuals for potential use of derivatives in calculating naive correlation coefficients.
     if corr_radii or corr_window:
         # Interpolate the residuals with cubic Hermite spline splines.
         res_fits = []
