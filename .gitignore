@@ -4,3 +4,4 @@ test.py
 /data
 /gp_fits
 /slurm_output
+.DS_Store
