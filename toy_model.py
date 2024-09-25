@@ -26,16 +26,18 @@ matplotlib.use("Agg")
 memory_usage = []   # Track memory usage throughout programme.
 
 # Switches for running different parts of the analysis.
-use_MF      = True
-use_GP      = False
+use_MF      = False
+use_GP      = True
 apply_DTW   = True
 corr_radii  = False     # SET FALSE: Code to be fixed for noise iterations.
 corr_window = False     # SET FALSE: Code to be fixed for noise iterations.
 make_plots  = True
+summ_plots  = True
 
 # File names for different analysis methods.
 if use_MF and use_GP:
-        raise Exception("Median filter (MF) and Gaussian process (GP) cannot be used at the same time!")
+    make_plots = False
+    fileloc = "/mnt/users/koe/plots/toy_model/ft_significance/"
 elif use_MF:
     fileloc = "/mnt/users/koe/plots/toy_model/use_MF/"
     MF_size = 20    # Define window size for median filter (if used).
@@ -58,9 +60,13 @@ bump_loc    = 5.0
 bump_FWHM   = 0.5
 bump_sigma  = bump_FWHM / (2.0 * np.sqrt(2.0 * np.log(2.0)))
 
-noise_arr = np.linspace(0.0, bump_size, 201, endpoint=True)
+if use_GP:
+    noise_arr = np.linspace(0.0, bump_size, 51, endpoint=True)
+    num_iterations = 50
+else:
+    noise_arr = np.linspace(0.0, bump_size, 201, endpoint=True)
+    num_iterations = 200
 num_noise = len(noise_arr)
-num_iterations = 500    # Iterations per noise level (for smoothing out DTW costs and correlations in final plots).
 
 
 # Initialize arrays for summary plots.
@@ -108,8 +114,10 @@ for i in range(num_noise):
     num_rad = len(rad)
     
     noise = noise_arr[i]
-    bump, Vraw, Vraw_werr, v_werr, residuals, res_Xft, MOND_res = toy_gen(rad, bump_loc, bump_size, bump_sigma, noise, num_iterations)
+    bump, Vraw, velocities, Vraw_werr, v_werr, residuals, res_Xft = toy_gen(rad, bump_loc, bump_size, bump_sigma, noise, num_iterations)
 
+    # Vobs (w/ feature) residuals if it's generated perfectly by MOND.
+    MOND_res = (velocities[1] - Vraw[1])
 
     # Apply simple median filter.
     if use_MF:
@@ -117,55 +125,49 @@ for i in range(num_noise):
         Xft_fname = fileloc+f"MF_fits/Xft/ratio={round(noise/bump_size, 2)}.png"
         
         if noise in noise_arr[::10]:
-            _, residuals = med_filter(rad, v_werr, size=MF_size, make_plots=make_plots, file_name=file_name)
+            _, residuals     = med_filter(rad, v_werr, size=MF_size, make_plots=make_plots, file_name=file_name)
             _, residuals_Xft = med_filter(rad, Vraw_werr, size=MF_size, make_plots=make_plots, file_name=Xft_fname)
         else:
-            _, residuals = med_filter(rad, v_werr, size=MF_size)
+            _, residuals     = med_filter(rad, v_werr, size=MF_size)
             _, residuals_Xft = med_filter(rad, Vraw_werr, size=MF_size)
-        
-        # Cut out data points near the starting point (see MF_fits plot).
-        # This shouldn't be required if we set mode='nearest' (i.e. aaa|abc|ccc) in scipy median_filter.
-        # idx_MF = math.ceil( MF_size / 2 )
-        # residuals = residuals[:,:,idx_MF:-idx_MF]
-        # residuals_Xft = residuals_Xft[:,:,idx_MF:-idx_MF]
-        # rad = rad[idx_MF:-idx_MF]
-        # num_rad -= 2 * idx_MF
 
+        _, residuals_MOND = med_filter(rad, velocities, size=MF_size)
 
     # Apply GP regression.
     if use_GP:
-        residuals, residuals_Xft = [], []
+        residuals, residuals_Xft, residuals_MOND = [], [], []
         file_names = [ fileloc+f"corner_plots/ratio={round(noise/bump_size, 2)}.png",
                                fileloc+f"GP_fits/ratio={round(noise/bump_size, 2)}.png" ]
         Xft_fnames = [ fileloc+f"corner_plots/Xft/ratio={round(noise/bump_size, 2)}.png",
                                fileloc+f"GP_fits/Xft/ratio={round(noise/bump_size, 2)}.png" ]
         
-        if noise in noise_arr[::10]:
-            pred_means, pred_bands = GP_fit(args, rad, v_werr[0], rad, make_plots=make_plots, file_name=file_names[0])
-            Xft_means, Xft_bands = GP_fit(args, rad, Vraw_werr[0], rad, make_plots=make_plots, file_name=Xft_fnames[0])
-        else:
-            pred_means, pred_bands = GP_fit(args, rad, v_werr[0], rad)
-            Xft_means, Xft_bands = GP_fit(args, rad, Vraw_werr[0], rad)
-
         for itr in range(num_iterations):
             if itr == 0 and noise in noise_arr[::10]:
+                pred_means, pred_bands = GP_fit(args, rad, v_werr[itr], rad, make_plots=make_plots, file_name=file_names[0])
+                Xft_means, Xft_bands = GP_fit(args, rad, Vraw_werr[itr], rad, make_plots=make_plots, file_name=Xft_fnames[0])
+            else:
+                pred_means, pred_bands = GP_fit(args, rad, v_werr[itr], rad)
+                Xft_means, Xft_bands = GP_fit(args, rad, Vraw_werr[itr], rad)
+
+            if itr == 0 and noise in noise_arr[::10]:
                 residuals.append( GP_residuals(rad, v_werr[itr], rad, pred_means, pred_bands,
-                                            make_plots=make_plots, file_name=file_names[1]) )
+                                               make_plots=make_plots, file_name=file_names[1]) )
                 residuals_Xft.append( GP_residuals(rad, Vraw_werr[itr], rad, Xft_means, Xft_bands,
-                                                make_plots=make_plots, file_name=Xft_fnames[1]) )
+                                                   make_plots=make_plots, file_name=Xft_fnames[1]) )
             else:
                 residuals.append( GP_residuals(rad, v_werr[itr], rad, pred_means, pred_bands) )
                 residuals_Xft.append( GP_residuals(rad, Vraw_werr[itr], rad, Xft_means, Xft_bands) )
-
+            
+            pred_means, pred_bands = GP_fit(args, rad, velocities[itr], rad)
+            residuals_MOND.append( GP_residuals(rad, velocities[itr], rad, pred_means, pred_bands) )
 
     # Transpose residuals arrays and extract required Xft residuals for DTW:
     # Transpose: 3D array of size num_iterations x 2 (vel) x 100 (rad) --> 2 x num_iterations x 100 (rad).
     res_dtw = np.transpose(residuals, (1, 0, 2))
 
     if use_MF or use_GP:
-        residuals_Xft = np.transpose(residuals_Xft, (1, 0, 2))
-        res_Xft = np.array(residuals_Xft[0])
-        MOND_res = np.array(residuals_Xft[1])
+        res_Xft = np.transpose(residuals_Xft, (1, 0, 2))[1]
+        MOND_res = np.transpose(residuals_MOND, (1, 0, 2))[1]
 
 
     # Interpolate residuals for potential use of derivatives in calculating naive correlation coefficients.
@@ -182,7 +184,7 @@ for i in range(num_noise):
 
 
     """
-    DTW on GP residuals.
+    DTW on residuals.
     """
     if apply_DTW:
         # print("Warping time dynamically... or something like that...")
@@ -204,10 +206,10 @@ for i in range(num_noise):
             if itr==0 and noise in noise_arr[::10]:
                 file_names = [ fileloc+f"dtw_matrix/ratio={round(noise/bump_size, 2)}.png",
                                fileloc+f"dtw_alignment/ratio={round(noise/bump_size, 2)}.png" ]
-                norm_cost = do_DTW(itr, num_rad, res_dtw[0], MOND_res, window=False, make_plots=make_plots, file_names=file_names)
+                norm_cost = do_DTW(itr, num_rad, res_dtw[1], MOND_res, window=False, make_plots=make_plots, file_names=file_names)
                 dtw_costs[itr][i] = norm_cost
             else:
-                norm_cost = do_DTW(itr, num_rad, res_dtw[0], MOND_res, window=False)
+                norm_cost = do_DTW(itr, num_rad, res_dtw[1], MOND_res, window=False)
                 dtw_costs[itr][i] = norm_cost
 
 
@@ -230,10 +232,10 @@ for i in range(num_noise):
             if itr==0 and noise in noise_arr[::10]:
                 file_names = [ fileloc+f"dtw_window/matrix/ratio={round(noise/bump_size, 2)}.png",
                                fileloc+f"dtw_window/alignment/ratio={round(noise/bump_size, 2)}.png" ]
-                win_cost = do_DTW(itr, window_size, res_dtw[0], MOND_res, window=True, make_plots=make_plots, file_names=file_names)
+                win_cost = do_DTW(itr, window_size, res_dtw[1], MOND_res, window=True, make_plots=make_plots, file_names=file_names)
                 dtw_window[itr][i] = win_cost
             else:
-                win_cost = do_DTW(itr, window_size, res_dtw[0], MOND_res, window=True)
+                win_cost = do_DTW(itr, window_size, res_dtw[1], MOND_res, window=True)
                 dtw_window[itr][i] = win_cost
 
 
@@ -392,84 +394,86 @@ plt.close()
 
 bump_ratio = noise_arr / bump_size
 
-if apply_DTW:
-    half_noise = math.ceil( num_noise / 2 )
+# Summary plots.
+if summ_plots:
+    if apply_DTW:
+        half_noise = math.ceil( num_noise / 2 )
 
-    dtw_costs   = np.percentile( dtw_costs,  [16.0, 50.0, 84.0], axis=0 )
-    Xft_costs   = np.percentile( Xft_costs,  [16.0, 50.0, 84.0], axis=0 )
-    dtw_window  = np.percentile( dtw_window, [16.0, 50.0, 84.0], axis=0 )
-    Xft_window  = np.percentile( Xft_window, [16.0, 50.0, 84.0], axis=0 )
+        dtw_costs   = np.percentile( dtw_costs,  [16.0, 50.0, 84.0], axis=0 )
+        Xft_costs   = np.percentile( Xft_costs,  [16.0, 50.0, 84.0], axis=0 )
+        dtw_window  = np.percentile( dtw_window, [16.0, 50.0, 84.0], axis=0 )
+        Xft_window  = np.percentile( Xft_window, [16.0, 50.0, 84.0], axis=0 )
 
-    plt.title("Normalized DTW alignment costs")
-    plt.ylabel("Normalized DTW costs")
-    plt.xlabel("Noise / feature height")
-    plt.plot(bump_ratio[:half_noise], dtw_costs[1][:half_noise], color='tab:blue', label="Costs w/ feature")
-    plt.fill_between(bump_ratio[:half_noise], dtw_costs[0][:half_noise], dtw_costs[2][:half_noise], color='tab:blue', alpha=0.2)
-    plt.plot(bump_ratio[:half_noise], Xft_costs[1][:half_noise], '--', color='red', label="Costs w/o feature")
-    plt.fill_between(bump_ratio[:half_noise], Xft_costs[0][:half_noise], Xft_costs[2][:half_noise], color='red', alpha=0.2)
+        plt.title("Normalized DTW alignment costs")
+        plt.ylabel("Normalized DTW costs")
+        plt.xlabel("Noise / feature height")
+        plt.plot(bump_ratio[:half_noise], dtw_costs[1][:half_noise], color='tab:blue', label="Costs w/ feature")
+        plt.fill_between(bump_ratio[:half_noise], dtw_costs[0][:half_noise], dtw_costs[2][:half_noise], color='tab:blue', alpha=0.2)
+        plt.plot(bump_ratio[:half_noise], Xft_costs[1][:half_noise], '--', color='red', label="Costs w/o feature")
+        plt.fill_between(bump_ratio[:half_noise], Xft_costs[0][:half_noise], Xft_costs[2][:half_noise], color='red', alpha=0.2)
 
-    plt.legend()
-    plt.savefig(fileloc+"dtwVnoise.png", dpi=300, bbox_inches="tight")
-    plt.close()
-
-
-    plt.title("Normalized DTW alignment costs")
-    plt.ylabel("Normalized DTW costs")
-    plt.xlabel("Noise / feature height")
-    plt.plot(bump_ratio, dtw_costs[1], color='tab:blue', label="Costs w/ feature")
-    plt.fill_between(bump_ratio, dtw_costs[0], dtw_costs[2], color='tab:blue', alpha=0.2)
-    plt.plot(bump_ratio, Xft_costs[1], '--', color='red', label="Costs w/o feature")
-    plt.fill_between(bump_ratio, Xft_costs[0], Xft_costs[2], color='red', alpha=0.2)
-
-    plt.legend()
-    plt.savefig(fileloc+"dtwVnoise_FULL.png", dpi=300, bbox_inches="tight")
-    plt.close()
+        plt.legend()
+        plt.savefig(fileloc+"dtwVnoise.png", dpi=300, bbox_inches="tight")
+        plt.close()
 
 
-    plt.title("Normalized DTW alignment costs")
-    plt.ylabel("Normalized DTW costs")
-    plt.xlabel("Noise / feature height")
-    plt.plot(bump_ratio[:half_noise], dtw_window[1][:half_noise], color='tab:blue', label="Costs w/ feature")
-    plt.fill_between(bump_ratio[:half_noise], dtw_window[0][:half_noise], dtw_window[2][:half_noise], color='tab:blue', alpha=0.2)
-    plt.plot(bump_ratio[:half_noise], Xft_window[1][:half_noise], '--', color='red', label="Costs w/o feature")
-    plt.fill_between(bump_ratio[:half_noise], Xft_window[0][:half_noise], Xft_window[2][:half_noise], color='red', alpha=0.2)
+        plt.title("Normalized DTW alignment costs")
+        plt.ylabel("Normalized DTW costs")
+        plt.xlabel("Noise / feature height")
+        plt.plot(bump_ratio, dtw_costs[1], color='tab:blue', label="Costs w/ feature")
+        plt.fill_between(bump_ratio, dtw_costs[0], dtw_costs[2], color='tab:blue', alpha=0.2)
+        plt.plot(bump_ratio, Xft_costs[1], '--', color='red', label="Costs w/o feature")
+        plt.fill_between(bump_ratio, Xft_costs[0], Xft_costs[2], color='red', alpha=0.2)
 
-    plt.legend()
-    plt.savefig(fileloc+"dtw_window/dtwVnoise.png", dpi=300, bbox_inches="tight")
-    plt.close()
-
-
-    plt.title("Normalized DTW alignment costs")
-    plt.ylabel("Normalized DTW costs")
-    plt.xlabel("Noise / feature height")
-    plt.plot(bump_ratio, dtw_window[1], color='tab:blue', label="Costs w/ feature")
-    plt.fill_between(bump_ratio, dtw_window[0], dtw_window[2], color='tab:blue', alpha=0.2)
-    plt.plot(bump_ratio, Xft_window[1], '--', color='red', label="Costs w/o feature")
-    plt.fill_between(bump_ratio, Xft_window[0], Xft_window[2], color='red', alpha=0.2)
-
-    plt.legend()
-    plt.savefig(fileloc+"dtw_window/dtwVnoise_FULL.png", dpi=300, bbox_inches="tight")
-    plt.close()
+        plt.legend()
+        plt.savefig(fileloc+"dtwVnoise_FULL.png", dpi=300, bbox_inches="tight")
+        plt.close()
 
 
-if corr_window:
-    plt.title("Correlation coefficients at peak of feature")
-    plt.ylabel("Correlation coefficients")
-    plt.xlabel("Noise / feature height")
-    plt.plot(bump_ratio[1:101], win_spearmans[:100], color='mediumblue', label=r"Spearman $\rho$")
-    plt.plot(bump_ratio[1:101], win_pearsons[:100], '--', color='mediumblue', label=r"Pearson $\rho$")
+        plt.title("Normalized DTW alignment costs")
+        plt.ylabel("Normalized DTW costs")
+        plt.xlabel("Noise / feature height")
+        plt.plot(bump_ratio[:half_noise], dtw_window[1][:half_noise], color='tab:blue', label="Costs w/ feature")
+        plt.fill_between(bump_ratio[:half_noise], dtw_window[0][:half_noise], dtw_window[2][:half_noise], color='tab:blue', alpha=0.2)
+        plt.plot(bump_ratio[:half_noise], Xft_window[1][:half_noise], '--', color='red', label="Costs w/o feature")
+        plt.fill_between(bump_ratio[:half_noise], Xft_window[0][:half_noise], Xft_window[2][:half_noise], color='red', alpha=0.2)
 
-    plt.legend()
-    plt.savefig(fileloc+"corrVnoise.png", dpi=300, bbox_inches="tight")
-    plt.close()
+        plt.legend()
+        plt.savefig(fileloc+"dtw_window/dtwVnoise.png", dpi=300, bbox_inches="tight")
+        plt.close()
 
 
-    plt.title("Correlation coefficients at peak of feature")
-    plt.ylabel("Correlation coefficients")
-    plt.xlabel("Noise / feature height")
-    plt.plot(bump_ratio[1::], win_spearmans, color='mediumblue', label=r"Spearman $\rho$")
-    plt.plot(bump_ratio[1::], win_pearsons, '--', color='mediumblue', label=r"Pearson $\rho$")
+        plt.title("Normalized DTW alignment costs")
+        plt.ylabel("Normalized DTW costs")
+        plt.xlabel("Noise / feature height")
+        plt.plot(bump_ratio, dtw_window[1], color='tab:blue', label="Costs w/ feature")
+        plt.fill_between(bump_ratio, dtw_window[0], dtw_window[2], color='tab:blue', alpha=0.2)
+        plt.plot(bump_ratio, Xft_window[1], '--', color='red', label="Costs w/o feature")
+        plt.fill_between(bump_ratio, Xft_window[0], Xft_window[2], color='red', alpha=0.2)
 
-    plt.legend()
-    plt.savefig(fileloc+"corrVnoise_FULL.png", dpi=300, bbox_inches="tight")
-    plt.close()
+        plt.legend()
+        plt.savefig(fileloc+"dtw_window/dtwVnoise_FULL.png", dpi=300, bbox_inches="tight")
+        plt.close()
+
+
+    if corr_window:
+        plt.title("Correlation coefficients at peak of feature")
+        plt.ylabel("Correlation coefficients")
+        plt.xlabel("Noise / feature height")
+        plt.plot(bump_ratio[1:101], win_spearmans[:100], color='mediumblue', label=r"Spearman $\rho$")
+        plt.plot(bump_ratio[1:101], win_pearsons[:100], '--', color='mediumblue', label=r"Pearson $\rho$")
+
+        plt.legend()
+        plt.savefig(fileloc+"corrVnoise.png", dpi=300, bbox_inches="tight")
+        plt.close()
+
+
+        plt.title("Correlation coefficients at peak of feature")
+        plt.ylabel("Correlation coefficients")
+        plt.xlabel("Noise / feature height")
+        plt.plot(bump_ratio[1::], win_spearmans, color='mediumblue', label=r"Spearman $\rho$")
+        plt.plot(bump_ratio[1::], win_pearsons, '--', color='mediumblue', label=r"Pearson $\rho$")
+
+        plt.legend()
+        plt.savefig(fileloc+"corrVnoise_FULL.png", dpi=300, bbox_inches="tight")
+        plt.close()
