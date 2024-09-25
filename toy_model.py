@@ -38,7 +38,7 @@ if use_MF and use_GP:
         raise Exception("Median filter (MF) and Gaussian process (GP) cannot be used at the same time!")
 elif use_MF:
     fileloc = "/mnt/users/koe/plots/toy_model/use_MF/"
-    MF_size = 10    # Define window size for median filter (if used).
+    MF_size = 20    # Define window size for median filter (if used).
 elif use_GP:
     fileloc = "/mnt/users/koe/plots/toy_model/use_GP/"
 else:
@@ -123,10 +123,13 @@ for i in range(num_noise):
             _, residuals = med_filter(rad, v_werr, size=MF_size)
             _, residuals_Xft = med_filter(rad, Vraw_werr, size=MF_size)
         
-        residuals = residuals[:,:,5:-5]
-        residuals_Xft = residuals_Xft[:,:,5:-5]
-        rad = rad[5:-5]
-        num_rad -= 10
+        # Cut out data points near the starting point (see MF_fits plot).
+        # This shouldn't be required if we set mode='nearest' (i.e. aaa|abc|ccc) in scipy median_filter.
+        # idx_MF = math.ceil( MF_size / 2 )
+        # residuals = residuals[:,:,idx_MF:-idx_MF]
+        # residuals_Xft = residuals_Xft[:,:,idx_MF:-idx_MF]
+        # rad = rad[idx_MF:-idx_MF]
+        # num_rad -= 2 * idx_MF
 
 
     # Apply GP regression.
