@@ -18,7 +18,7 @@ def toy_gen(rad, bump_loc, bump_size, bump_sigma, noise, num_iterations):
     # Generate Vobs from Vbar using MOND function.
     vel_MOND = np.sqrt(MOND_vsq(rad, Vbar**2))
     Vmax = max(vel_MOND)
-    velocities = np.array([ vel_MOND, Vbar ])
+    velocities = np.array([ Vbar, vel_MOND ])
     velocities = np.array( [velocities] * num_iterations )
 
     # Scatter RCs with Gaussian noise.
@@ -26,7 +26,7 @@ def toy_gen(rad, bump_loc, bump_size, bump_sigma, noise, num_iterations):
     
     # Generate perfect GP fit using original functions (arctan w/o bump) and calculate residuals.
     Vobs_raw = np.sqrt(MOND_vsq(rad, Vbar_raw**2))
-    Vraw = np.array([ Vobs_raw, Vbar_raw ])
+    Vraw = np.array([ Vbar_raw, Vobs_raw ])
     Vraw = np.array( [Vraw] * num_iterations )
     Vraw_werr = np.random.normal(Vraw, noise) / Vmax  # Scatter Vraw for testing GP fits.
     Vraw /= Vmax
@@ -37,7 +37,6 @@ def toy_gen(rad, bump_loc, bump_size, bump_sigma, noise, num_iterations):
     res_Xft = np.random.normal(Vobs_raw, noise) - Vobs_raw
     res_Xft /= Vmax
 
-    # Vobs (w/ feature) residuals if it's generated perfectly by MOND.
-    MOND_res = (vel_MOND - Vobs_raw) / Vmax
+    velocities /= Vmax
 
-    return bump, Vraw, Vraw_werr, v_werr, residuals, res_Xft, MOND_res
+    return bump, Vraw, velocities, Vraw_werr, v_werr, residuals, res_Xft
