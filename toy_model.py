@@ -78,6 +78,8 @@ noise_arr = np.linspace(0.0, bump_size/2, 101, endpoint=True)
 num_iterations = 200
 num_noise = len(noise_arr)
 
+print(f"\nCorrelating RCs with {num_noise} noise levels from 0.0 to 0.5 * ft height, each with {num_iterations} iterations.")
+
 
 # Initialize arrays for summary plots.
 rad_spearmans = [ [ [] for _ in range(num_noise-1) ] for _ in range(3) ]
@@ -132,14 +134,18 @@ for i in range(num_noise):
         else:
             print(f"\nRunning iteration {i+1}/{num_noise}...")
 
-    rad = np.linspace(10., 0., 100, endpoint=False)[::-1]   # Defined this way to exclude the starting point r=0.
+    noise = noise_arr[i]
+
+    # Define galaxy radius (units ~kpc; excluding the point r=0).
+    rad = np.linspace(10., 0., 100, endpoint=False)[::-1]
     num_rad = len(rad)
     
-    noise = noise_arr[i]
+    # Generate toy RCs with residuals (Vraw = w/o ft, Vraw_werr = w/ noise; velocitites = w/ ft, v_werr = w/ noise).
     bump, Vraw, velocities, Vraw_werr, v_werr, residuals, res_Xft = toy_gen(rad, bump_loc, bump_size, bump_sigma, noise, num_iterations)
 
     # Vobs (w/ feature) residuals if it's generated perfectly by MOND.
     MOND_res = (velocities[:,1,:] - Vraw[:,1,:])
+
 
     # Apply simple median filter.
     if use_MF:
@@ -296,6 +302,7 @@ if apply_DTW:
     dtw_window  = np.percentile( dtw_window, [16.0, 50.0, 84.0], axis=0 )
     Xft_window  = np.percentile( Xft_window, [16.0, 50.0, 84.0], axis=0 )
 
+    # DTW costs across entire RC vs noise (truncated).
     plt.title("Normalized DTW alignment costs")
     plt.ylabel("Normalized DTW costs")
     plt.xlabel("Noise / feature height")
@@ -308,7 +315,7 @@ if apply_DTW:
     plt.savefig(fileloc+"dtwVnoise.png", dpi=300, bbox_inches="tight")
     plt.close()
 
-
+    # DTW costs across entire RC vs noise (full).
     plt.title("Normalized DTW alignment costs")
     plt.ylabel("Normalized DTW costs")
     plt.xlabel("Noise / feature height")
@@ -321,7 +328,7 @@ if apply_DTW:
     plt.savefig(fileloc+"dtwVnoise_FULL.png", dpi=300, bbox_inches="tight")
     plt.close()
 
-
+    # DTW costs on window around feature vs noise (truncated).
     plt.title("Normalized DTW alignment costs (on window around feature)")
     plt.ylabel("Normalized DTW costs")
     plt.xlabel("Noise / feature height")
@@ -334,7 +341,7 @@ if apply_DTW:
     plt.savefig(fileloc+"dtw_window/dtwVnoise.png", dpi=300, bbox_inches="tight")
     plt.close()
 
-
+    # DTW costs on window around feature vs noise (full).
     plt.title("Normalized DTW alignment costs (on window around feature)")
     plt.ylabel("Normalized DTW costs")
     plt.xlabel("Noise / feature height")
@@ -353,8 +360,9 @@ c_corr = [ 'royalblue', 'midnightblue', 'red', 'darkred' ]
 if corr_rad:
     rad_spearmans, rad_pearsons = np.array(rad_spearmans), np.array(rad_pearsons)
     rad_Xft_spearmans, rad_Xft_pearsons = np.array(rad_Xft_spearmans), np.array(rad_Xft_pearsons)
+
     for der in range(3):
-        # Truncated (by half) correlation vs noise plots.
+        # Correlation across entire RC vs noise (truncated).
         plt.title("Correlation coefficients across entire RC")
         plt.ylabel("Correlation coefficients")
         plt.xlabel("Noise / feature height")
@@ -372,7 +380,7 @@ if corr_rad:
         plt.savefig(fileloc+f"correlations/radii_d{der}.png", dpi=300, bbox_inches="tight")
         plt.close()
 
-        # Full correlation vs noise plot.
+        # Correlation across entire RC vs noise (full).
         plt.title("Correlation coefficients across entire RC")
         plt.ylabel("Correlation coefficients")
         plt.xlabel("Noise / feature height")
@@ -395,7 +403,7 @@ if corr_win:
     win_spearmans, win_pearsons = np.array(win_spearmans), np.array(win_pearsons)
     win_Xft_spearmans, win_Xft_pearsons = np.array(win_Xft_spearmans), np.array(win_Xft_pearsons)
     for der in range(3):
-        # Truncated (by half) correlation vs noise plots.
+        # Correlation on window around feature vs noise (truncated).
         plt.title("Correlation coefficients on window around feature")
         plt.ylabel("Correlation coefficients")
         plt.xlabel("Noise / feature height")
@@ -413,7 +421,7 @@ if corr_win:
         plt.savefig(fileloc+f"correlations/window_d{der}.png", dpi=300, bbox_inches="tight")
         plt.close()
 
-        # Full correlation vs noise plot.
+        # Correlation on window around feature vs noise (full).
         plt.title("Correlation coefficients on window around feature")
         plt.ylabel("Correlation coefficients")
         plt.xlabel("Noise / feature height")
