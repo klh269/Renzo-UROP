@@ -29,21 +29,12 @@ memory_usage = []   # Track memory usage throughout programme.
 
 
 # Switches for running different parts of the analysis.
-use_MF      = True
+use_MF      = False
 use_GP      = False
 apply_DTW   = True
 corr_rad    = True
-corr_win    = False     # SET FALSE: Code to be fixed for noise iterations.
+corr_win    = True
 make_plots  = True
-
-print("Running toy_model.py with the following methods:")
-if use_MF:     print("Median filter")
-if use_GP:     print("Gaussian process")
-if apply_DTW:  print("Dynamic time warping")
-if corr_rad:   print("Correlation coefficients (increasing radii)")
-if corr_win:   print("Correlation coefficients (moving window)")
-if make_plots: print("Make plots")
-
 
 # File names for different analysis methods.
 if use_MF and use_GP:
@@ -61,6 +52,16 @@ if corr_rad or corr_win:
     labels = [ 'Vbar', 'Vobs' ]
     deriv_dir = [ "d0", "d1", "d2" ]
     color_bar = "orange"
+    if corr_win: window_size = 11
+
+# Print report of analyses used and some corresponding variables.
+print("Running toy_model.py with the following methods:")
+if use_MF:     print(f" - Median filter (window length = {MF_size})")
+if use_GP:     print(" - Gaussian process")
+if apply_DTW:  print(" - Dynamic time warping")
+if corr_rad:   print(" - Correlation coefficients (increasing radii)")
+if corr_win:   print(f" - Correlation coefficients (moving window, length = {window_size})")
+if make_plots: print(" - Make plots")
 
 
 # Parameters for Gaussian bump (fixed feature) and noise (varying amplitudes).
@@ -69,12 +70,12 @@ bump_loc    = 5.0
 bump_FWHM   = 0.5
 bump_sigma  = bump_FWHM / (2.0 * np.sqrt(2.0 * np.log(2.0)))
 
-if use_GP:
-    noise_arr = np.linspace(0.0, bump_size/2, 51, endpoint=True)
-    num_iterations = 50
-else:
-    noise_arr = np.linspace(0.0, bump_size/2, 101, endpoint=True)
-    num_iterations = 200
+# if use_GP:
+#     noise_arr = np.linspace(0.0, bump_size/2, 51, endpoint=True)
+#     num_iterations = 50
+# else:
+noise_arr = np.linspace(0.0, bump_size/2, 101, endpoint=True)
+num_iterations = 200
 num_noise = len(noise_arr)
 
 
@@ -83,10 +84,14 @@ rad_spearmans = [ [ [] for _ in range(num_noise-1) ] for _ in range(3) ]
 rad_pearsons  = [ [ [] for _ in range(num_noise-1) ] for _ in range(3) ]
 rad_Xft_spearmans = [ [ [] for _ in range(num_noise-1) ] for _ in range(3) ]
 rad_Xft_pearsons  = [ [ [] for _ in range(num_noise-1) ] for _ in range(3) ]
-win_spearmans = np.zeros((num_iterations, num_noise))
-win_pearsons  = np.zeros((num_iterations, num_noise))
-dtw_costs, Xft_costs = np.copy(win_spearmans), np.copy(win_spearmans)
-dtw_window, Xft_window = np.copy(win_spearmans), np.copy(win_spearmans)
+
+win_spearmans = [ [ [] for _ in range(num_noise-1) ] for _ in range(3) ]
+win_pearsons  = [ [ [] for _ in range(num_noise-1) ] for _ in range(3) ]
+win_Xft_spearmans = [ [ [] for _ in range(num_noise-1) ] for _ in range(3) ]
+win_Xft_pearsons  = [ [ [] for _ in range(num_noise-1) ] for _ in range(3) ]
+
+dtw_costs, Xft_costs = np.zeros((num_iterations, num_noise)), np.zeros((num_iterations, num_noise))
+dtw_window, Xft_window = np.zeros((num_iterations, num_noise)), np.zeros((num_iterations, num_noise))
 
 
 # Initialize args for GP (if used).
@@ -157,26 +162,17 @@ for i in range(num_noise):
                                fileloc+f"GP_fits/ratio={round(noise/bump_size, 2)}.png" ]
         Xft_fnames = [ fileloc+f"corner_plots/Xft/ratio={round(noise/bump_size, 2)}.png",
                                fileloc+f"GP_fits/Xft/ratio={round(noise/bump_size, 2)}.png" ]
-        
-        for itr in range(num_iterations):
-            if itr == 0 and noise in noise_arr[::10]:
-                pred_means, pred_bands = GP_fit(args, rad, v_werr[itr], rad, make_plots=make_plots, file_name=file_names[0])
-                Xft_means, Xft_bands = GP_fit(args, rad, Vraw_werr[itr], rad, make_plots=make_plots, file_name=Xft_fnames[0])
-            else:
-                pred_means, pred_bands = GP_fit(args, rad, v_werr[itr], rad)
-                Xft_means, Xft_bands = GP_fit(args, rad, Vraw_werr[itr], rad)
 
-            if itr == 0 and noise in noise_arr[::10]:
-                residuals.append( GP_residuals(rad, v_werr[itr], rad, pred_means, pred_bands,
-                                               make_plots=make_plots, file_name=file_names[1]) )
-                residuals_Xft.append( GP_residuals(rad, Vraw_werr[itr], rad, Xft_means, Xft_bands,
-                                                   make_plots=make_plots, file_name=Xft_fnames[1]) )
-            else:
-                residuals.append( GP_residuals(rad, v_werr[itr], rad, pred_means, pred_bands) )
-                residuals_Xft.append( GP_residuals(rad, Vraw_werr[itr], rad, Xft_means, Xft_bands) )
-            
-            pred_means, pred_bands = GP_fit(args, rad, velocities[itr], rad)
-            residuals_MOND.append( GP_residuals(rad, velocities[itr], rad, pred_means, pred_bands) )
+        pred_means, pred_bands = GP_fit(args, rad, v_werr[0], rad, make_plots=(make_plots and noise in noise_arr[::10]), file_name=file_names[0])
+        Xft_means, Xft_bands = GP_fit(args, rad, Vraw_werr[0], rad, make_plots=(make_plots and noise in noise_arr[::10]), file_name=Xft_fnames[0])
+        pred_means_MOND, pred_bands_MOND = GP_fit(args, rad, velocities[itr], rad)
+
+        for itr in range(num_iterations):
+            residuals.append( GP_residuals(rad, v_werr[itr], rad, pred_means, pred_bands,
+                                           make_plots=(make_plots and itr==1 and noise in noise_arr[::10]), file_name=file_names[1]) )
+            residuals_Xft.append( GP_residuals(rad, Vraw_werr[itr], rad, Xft_means, Xft_bands,
+                                               make_plots=(make_plots and itr==1 and noise in noise_arr[::10]), file_name=Xft_fnames[1]) )
+            residuals_MOND.append( GP_residuals(rad, velocities[itr], rad, pred_means_MOND, pred_bands_MOND) )
 
     # Transpose residuals arrays and extract required Xft residuals for DTW:
     # Transpose: 3D array of size num_iterations x 2 (vel) x 100 (rad) --> 2 x num_iterations x 100 (rad).
@@ -215,27 +211,26 @@ for i in range(num_noise):
         # DTW analyses on full RCs.
         for itr in range(num_iterations):
             file_names = [ fileloc+f"Xft_matrix/ratio={round(noise/bump_size, 2)}.png",
-                               fileloc+f"Xft_alignment/ratio={round(noise/bump_size, 2)}.png" ]
+                           fileloc+f"Xft_alignment/ratio={round(noise/bump_size, 2)}.png" ]
             Xft_cost = do_DTW(itr, num_rad, res_Xft, MOND_res, window=False, make_plots=(make_plots and itr==0 and noise in noise_arr[::10]), file_names=file_names)
             Xft_costs[itr][i] = Xft_cost
 
         for itr in range(num_iterations):
             file_names = [ fileloc+f"dtw_matrix/ratio={round(noise/bump_size, 2)}.png",
-                               fileloc+f"dtw_alignment/ratio={round(noise/bump_size, 2)}.png" ]
+                           fileloc+f"dtw_alignment/ratio={round(noise/bump_size, 2)}.png" ]
             norm_cost = do_DTW(itr, num_rad, res_dtw[1], MOND_res, window=False, make_plots=(make_plots and itr==0 and noise in noise_arr[::10]), file_names=file_names)
             dtw_costs[itr][i] = norm_cost
 
         # DTW along a small window (length 1) around the feature.
-        window_size = 11
         for itr in range(num_iterations):
             file_names = [ fileloc+f"dtw_window/Xft_matrix/ratio={round(noise/bump_size, 2)}.png",
-                            fileloc+f"dtw_window/Xft_alignment/ratio={round(noise/bump_size, 2)}.png" ]
+                           fileloc+f"dtw_window/Xft_alignment/ratio={round(noise/bump_size, 2)}.png" ]
             win_cost = do_DTW(itr, window_size, res_Xft, MOND_res, window=True, make_plots=(make_plots and itr==0 and noise in noise_arr[::10]), file_names=file_names)
             Xft_window[itr][i] = win_cost
 
         for itr in range(num_iterations):
             file_names = [ fileloc+f"dtw_window/matrix/ratio={round(noise/bump_size, 2)}.png",
-                            fileloc+f"dtw_window/alignment/ratio={round(noise/bump_size, 2)}.png" ]
+                           fileloc+f"dtw_window/alignment/ratio={round(noise/bump_size, 2)}.png" ]
             win_cost = do_DTW(itr, window_size, res_dtw[1], MOND_res, window=True, make_plots=(make_plots and itr==0 and noise in noise_arr[::10]), file_names=file_names)
             dtw_window[itr][i] = win_cost
 
@@ -249,7 +244,6 @@ for i in range(num_noise):
     if corr_rad and noise != 0.0:
         noise_ratio = round(noise/bump_size, 2)
         for der in range(3):
-            file_name = fileloc+f"correlations/radii_{deriv_dir[der]}/ratio={round(noise/bump_size, 2)}.png"
             rad_corr_perc = corr_radii( num_iterations, der, num_rad, res_fits, v_werr, (make_plots and noise in noise_arr[::10]),
                                         fileloc, noise_ratio, rad, bump, Vraw, residuals, noise )
             rad_spearmans[der][i-1] = rad_corr_perc[0]
@@ -266,72 +260,18 @@ for i in range(num_noise):
     if corr_win and noise != 0.0:
         noise_ratio = round(noise/bump_size, 2)
         for der in range(3):
-            # print("Computing correlation coefficients with moving window...")
-            # Correlate Vobs and Vbar (d0, d1, d2) along a moving window of length 1 * kpc.
-            wmax = num_rad - 5
-            win_corr = [ [[], []], [[], []], [[], []] ]
-            for der in range(3):
-                for j in range(5, wmax):
-                    jmin, jmax = j - 5, j + 5
-                    win_corr[der][0].append(stats.spearmanr(res_fits[der][0][jmin:jmax], res_fits[der][1][jmin:jmax])[0])
-                    win_corr[der][1].append(stats.pearsonr(res_fits[der][0][jmin:jmax], res_fits[der][1][jmin:jmax])[0])
+            win_corr_perc = corr_window( num_iterations, der, num_rad, res_fits, v_werr, window_size,
+                                        (make_plots and noise in noise_arr[::10]), fileloc, noise_ratio, rad, bump, Vraw, residuals, noise )
+            win_spearmans[der][i-1] = win_corr_perc[0]
+            win_pearsons[der][i-1]  = win_corr_perc[1]
 
-            mid_pt = math.floor( len(win_corr[der][0]) / 2 )
-            win_spearmans.append(win_corr[der][0][mid_pt])
-            win_pearsons.append(win_corr[der][1][mid_pt])
-                
-            # Compute average baryonic dominance (using Vobs from SPARC data) in moving window.
-            wbar_ratio = []
-            for j in range(5, wmax):
-                wbar_ratio.append( sum( v_werr[1][j-5:j+5] / v_werr[0][j-5:j+5] ) / 11 )
+            res_fits_temp, v_werr_temp = [ np.squeeze(np.array(res_fits)[:,:,0]), np.squeeze(res_Xft_fits, axis=2) ], [ v_werr[:,0,:], Vraw_werr[:,1,:] ]
+            res_fits_temp, v_werr_temp = np.transpose(res_fits_temp, (1, 2, 0, 3)), np.transpose(v_werr_temp, (1, 0, 2))
+            win_corr_perc = corr_window( num_iterations, der, num_rad, res_fits_temp, v_werr_temp, window_size )
+            win_Xft_spearmans[der][i-1] = win_corr_perc[0]
+            win_Xft_pearsons[der][i-1]  = win_corr_perc[1]
 
-            win_spearman = stats.spearmanr(win_corr[der][0], wbar_ratio)[0]
-            win_pearson = stats.pearsonr(win_corr[der][1], wbar_ratio)[0]
-            
 
-            # Plot corrletaions as 1 main plot + 1 subplot, using only Vobs from data for Vbar/Vobs.
-            if make_plots and noise in noise_arr[::10]:
-                for der in range(3):
-                    fig1, (ax0, ax1, ax2) = plt.subplots(3, 1, sharex=True, gridspec_kw={'height_ratios': [5, 2, 3]})
-                    fig1.set_size_inches(7, 7)
-                    ax0.set_title("Moving window correlation: Toy model")
-                    ax0.set_ylabel("Normalised velocities")
-                    ax2.set_xlabel("Radii (kpc)")
-                    for i in range(2):
-                        ax0.errorbar(rad, v_werr[i], noise/100.0, color=colors[i], alpha=0.3, capsize=3, fmt="o", ls="none")
-                        ax0.plot(rad, Vraw[i], color=colors[i], label=labels[i])
-                        if der == 0:
-                            ax1.scatter(rad, residuals[i], color=colors[i], alpha=0.3)
-                        ax1.plot(rad, res_fits[der][i], color=colors[i], alpha=0.7, label=labels[i])
-
-                    ax0.plot(rad, bump, '--', label="Feature")
-                    ax0.legend(loc="upper left", bbox_to_anchor=(1,1))
-                    ax0.grid()
-
-                    ax1.legend(loc="upper left", bbox_to_anchor=(1,1))
-                    ax1.grid()
-
-                    # ax2.set_xlabel(r'Normalised radius ($\times R_{eff}$)')
-                    ax2.set_xlabel('Radius (kpc)')
-                    ax2.set_ylabel("Correlations")
-
-                    # Plot correlations and Vbar/Vobs.
-                    ax2.plot(rad[5:wmax], win_corr[der][0], color='mediumblue', label=r"Spearman $\rho$")
-                    ax2.plot(rad[5:wmax], win_corr[der][1], ':', color='mediumblue', label=r"Pearson $\rho$")
-                    ax2.plot([], [], ' ', label=r"$\rho_s=$"+str(round(win_spearman, 3))+r", $\rho_p=$"+str(round(win_pearson, 3)))
-                
-                    ax5 = ax2.twinx()
-                    ax5.set_ylabel(r'Average $v_{bar}/v_{obs}$')
-                    ax5.plot(rad[10:wmax], wbar_ratio[5:], '--', color=color_bar, label="Vbar/Vobs")
-                    ax5.tick_params(axis='y', labelcolor=color_bar)
-                    
-                    ax2.legend(loc="upper left", bbox_to_anchor=(1.11, 1))
-                    ax2.grid()
-
-                    plt.subplots_adjust(hspace=0.05)
-                    fig1.savefig(fileloc+f"correlations/window_{deriv_dir[der]}/ratio={round(noise/bump_size, 2)}.png", dpi=300, bbox_inches="tight")
-                    plt.close()
-        
     memory_usage.append(getrusage(RUSAGE_SELF).ru_maxrss)
     jax.clear_caches()    # One-line attempt to solve the JIT memory allocation problem.
 
@@ -429,11 +369,11 @@ if corr_rad:
         plt.fill_between(bump_ratio[1:half_noise], rad_Xft_pearsons[der,:half_noise-1,0], rad_Xft_pearsons[der,:half_noise-1,2], color=c_corr[3], alpha=0.15)
         
         plt.legend()
-        plt.savefig(fileloc+f"corrVnoise_d{der}.png", dpi=300, bbox_inches="tight")
+        plt.savefig(fileloc+f"correlations/radii_d{der}.png", dpi=300, bbox_inches="tight")
         plt.close()
 
         # Full correlation vs noise plot.
-        plt.title("Correlation coefficients at peak of feature")
+        plt.title("Correlation coefficients across entire RC")
         plt.ylabel("Correlation coefficients")
         plt.xlabel("Noise / feature height")
 
@@ -447,28 +387,46 @@ if corr_rad:
         plt.fill_between(bump_ratio[1:], rad_Xft_pearsons[der,:,0], rad_Xft_pearsons[der,:,2], color=c_corr[3], alpha=0.15)
 
         plt.legend()
-        plt.savefig(fileloc+f"corrVnoise_d{der}_FULL.png", dpi=300, bbox_inches="tight")
+        plt.savefig(fileloc+f"correlations/radii_d{der}_FULL.png", dpi=300, bbox_inches="tight")
         plt.close()
 
 
 if corr_win:
-    plt.title("Correlation coefficients at peak of feature")
-    plt.ylabel("Correlation coefficients")
-    plt.xlabel("Noise / feature height")
-    plt.plot(bump_ratio[1:101], win_spearmans[:100], color='mediumblue', label=r"Spearman $\rho$")
-    plt.plot(bump_ratio[1:101], win_pearsons[:100], '--', color='mediumblue', label=r"Pearson $\rho$")
+    win_spearmans, win_pearsons = np.array(win_spearmans), np.array(win_pearsons)
+    win_Xft_spearmans, win_Xft_pearsons = np.array(win_Xft_spearmans), np.array(win_Xft_pearsons)
+    for der in range(3):
+        # Truncated (by half) correlation vs noise plots.
+        plt.title("Correlation coefficients on window around feature")
+        plt.ylabel("Correlation coefficients")
+        plt.xlabel("Noise / feature height")
 
-    plt.legend()
-    plt.savefig(fileloc+"corrVnoise.png", dpi=300, bbox_inches="tight")
-    plt.close()
+        plt.plot(bump_ratio[1:half_noise], win_spearmans[der,:half_noise-1,1], color=c_corr[0], label=r"Spearman $\rho$ (w/ ft)")
+        plt.fill_between(bump_ratio[1:half_noise], win_spearmans[der,:half_noise-1,0], win_spearmans[der,:half_noise-1,2], color=c_corr[0], alpha=0.15)
+        plt.plot(bump_ratio[1:half_noise], win_pearsons[der,:half_noise-1,1], '--', color=c_corr[1], label=r"Pearson $\rho$ (w/ ft)")
+        plt.fill_between(bump_ratio[1:half_noise], win_pearsons[der,:half_noise-1,0], win_pearsons[der,:half_noise-1,2], color=c_corr[1], alpha=0.15)
+        plt.plot(bump_ratio[1:half_noise], win_Xft_spearmans[der,:half_noise-1,1], color=c_corr[2], label=r"Spearman $\rho$ (w/o ft)")
+        plt.fill_between(bump_ratio[1:half_noise], win_Xft_spearmans[der,:half_noise-1,0], win_Xft_spearmans[der,:half_noise-1,2], color=c_corr[2], alpha=0.15)
+        plt.plot(bump_ratio[1:half_noise], win_Xft_pearsons[der,:half_noise-1,1], '--', color=c_corr[3], label=r"Pearson $\rho$ (w/o ft)")
+        plt.fill_between(bump_ratio[1:half_noise], win_Xft_pearsons[der,:half_noise-1,0], win_Xft_pearsons[der,:half_noise-1,2], color=c_corr[3], alpha=0.15)
+        
+        plt.legend()
+        plt.savefig(fileloc+f"correlations/window_d{der}.png", dpi=300, bbox_inches="tight")
+        plt.close()
 
+        # Full correlation vs noise plot.
+        plt.title("Correlation coefficients on window around feature")
+        plt.ylabel("Correlation coefficients")
+        plt.xlabel("Noise / feature height")
 
-    plt.title("Correlation coefficients at peak of feature")
-    plt.ylabel("Correlation coefficients")
-    plt.xlabel("Noise / feature height")
-    plt.plot(bump_ratio[1::], win_spearmans, color='mediumblue', label=r"Spearman $\rho$")
-    plt.plot(bump_ratio[1::], win_pearsons, '--', color='mediumblue', label=r"Pearson $\rho$")
+        plt.plot(bump_ratio[1:], win_spearmans[der,:,1], color=c_corr[0], label=r"Spearman $\rho$ (w/ ft)")
+        plt.fill_between(bump_ratio[1:], win_spearmans[der,:,0], win_spearmans[der,:,2], color=c_corr[0], alpha=0.15)
+        plt.plot(bump_ratio[1:], win_pearsons[der,:,1], '--', color=c_corr[1], label=r"Pearson $\rho$ (w/ ft)")
+        plt.fill_between(bump_ratio[1:], win_pearsons[der,:,0], win_pearsons[der,:,2], color=c_corr[1], alpha=0.15)
+        plt.plot(bump_ratio[1:], win_Xft_spearmans[der,:,1], color=c_corr[2], label=r"Spearman $\rho$ (w/o ft)")
+        plt.fill_between(bump_ratio[1:], win_Xft_spearmans[der,:,0], win_Xft_spearmans[der,:,2], color=c_corr[2], alpha=0.15)
+        plt.plot(bump_ratio[1:], win_Xft_pearsons[der,:,1], '--', color=c_corr[3], label=r"Pearson $\rho$ (w/o ft)")
+        plt.fill_between(bump_ratio[1:], win_Xft_pearsons[der,:,0], win_Xft_pearsons[der,:,2], color=c_corr[3], alpha=0.15)
 
-    plt.legend()
-    plt.savefig(fileloc+"corrVnoise_FULL.png", dpi=300, bbox_inches="tight")
-    plt.close()
+        plt.legend()
+        plt.savefig(fileloc+f"correlations/window_d{der}_FULL.png", dpi=300, bbox_inches="tight")
+        plt.close()
