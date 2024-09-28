@@ -30,7 +30,7 @@ memory_usage = []   # Track memory usage throughout programme.
 
 # Switches for running different parts of the analysis.
 use_MF      = False
-use_GP      = False
+use_GP      = True
 apply_DTW   = True
 corr_rad    = True
 corr_win    = True
@@ -126,11 +126,11 @@ if use_GP:
 """
 # for i in tqdm(range(num_noise)):
 for i in range(num_noise):
-    if i%10 == 0 or use_GP:
+    if i%10 == 0:
         if i == 0:
-            print(f"\nRunning iteration {i}/{num_noise} (with {num_iterations} iterations per noise level)...")
+            print(f"\nRunning iteration {i+1}/{num_noise} (with {num_iterations} iterations per noise level)...")
         else:
-            print(f"\nRunning iteration {i}/{num_noise}...")
+            print(f"\nRunning iteration {i+1}/{num_noise}...")
 
     rad = np.linspace(10., 0., 100, endpoint=False)[::-1]   # Defined this way to exclude the starting point r=0.
     num_rad = len(rad)
@@ -165,7 +165,7 @@ for i in range(num_noise):
 
         pred_means, pred_bands = GP_fit(args, rad, v_werr[0], rad, make_plots=(make_plots and noise in noise_arr[::10]), file_name=file_names[0])
         Xft_means, Xft_bands = GP_fit(args, rad, Vraw_werr[0], rad, make_plots=(make_plots and noise in noise_arr[::10]), file_name=Xft_fnames[0])
-        pred_means_MOND, pred_bands_MOND = GP_fit(args, rad, velocities[itr], rad)
+        pred_means_MOND, pred_bands_MOND = GP_fit(args, rad, velocities[0], rad)
 
         for itr in range(num_iterations):
             residuals.append( GP_residuals(rad, v_werr[itr], rad, pred_means, pred_bands,
