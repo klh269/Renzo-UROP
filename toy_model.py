@@ -70,12 +70,12 @@ bump_loc    = 5.0
 bump_FWHM   = 0.5
 bump_sigma  = bump_FWHM / (2.0 * np.sqrt(2.0 * np.log(2.0)))
 
-# if use_GP:
-#     noise_arr = np.linspace(0.0, bump_size/2, 51, endpoint=True)
-#     num_iterations = 50
-# else:
-noise_arr = np.linspace(0.0, bump_size/2, 101, endpoint=True)
-num_iterations = 200
+if use_GP:
+    noise_arr = np.linspace(0.0, bump_size/2, 51, endpoint=True)
+    num_iterations = 50
+else:
+    noise_arr = np.linspace(0.0, bump_size/2, 101, endpoint=True)
+    num_iterations = 200
 num_noise = len(noise_arr)
 
 print(f"\nCorrelating RCs with {num_noise} noise levels from 0.0 to 0.5 * ft height, each with {num_iterations} iterations.")
@@ -128,7 +128,7 @@ if use_GP:
 """
 # for i in tqdm(range(num_noise)):
 for i in range(num_noise):
-    if i%10 == 0:
+    if i%10 == 0 or use_GP:
         if i == 0:
             print(f"\nRunning iteration {i+1}/{num_noise} (with {num_iterations} iterations per noise level)...")
         else:
@@ -169,15 +169,19 @@ for i in range(num_noise):
         Xft_fnames = [ fileloc+f"corner_plots/Xft/ratio={round(noise/bump_size, 2)}.png",
                                fileloc+f"GP_fits/Xft/ratio={round(noise/bump_size, 2)}.png" ]
 
-        pred_means, pred_bands = GP_fit(args, rad, v_werr[0], rad, make_plots=(make_plots and noise in noise_arr[::10]), file_name=file_names[0])
-        Xft_means, Xft_bands = GP_fit(args, rad, Vraw_werr[0], rad, make_plots=(make_plots and noise in noise_arr[::10]), file_name=Xft_fnames[0])
-        pred_means_MOND, pred_bands_MOND = GP_fit(args, rad, velocities[0], rad)
+        # pred_means, pred_bands = GP_fit(args, rad, v_werr[0], rad, make_plots=(make_plots and noise in noise_arr[::10]), file_name=file_names[0])
+        # Xft_means, Xft_bands = GP_fit(args, rad, Vraw_werr[0], rad, make_plots=(make_plots and noise in noise_arr[::10]), file_name=Xft_fnames[0])
+        # pred_means_MOND, pred_bands_MOND = GP_fit(args, rad, velocities[0], rad)
 
         for itr in range(num_iterations):
+            pred_means, pred_bands = GP_fit(args, rad, v_werr[itr], rad, make_plots=(make_plots and itr==0 and noise in noise_arr[::10]), file_name=file_names[0])
+            Xft_means, Xft_bands = GP_fit(args, rad, Vraw_werr[itr], rad, make_plots=(make_plots and itr==0 and noise in noise_arr[::10]), file_name=Xft_fnames[0])
+            pred_means_MOND, pred_bands_MOND = GP_fit(args, rad, velocities[itr], rad)
+
             residuals.append( GP_residuals(rad, v_werr[itr], rad, pred_means, pred_bands,
-                                           make_plots=(make_plots and itr==1 and noise in noise_arr[::10]), file_name=file_names[1]) )
+                                           make_plots=(make_plots and itr==0 and noise in noise_arr[::10]), file_name=file_names[1]) )
             residuals_Xft.append( GP_residuals(rad, Vraw_werr[itr], rad, Xft_means, Xft_bands,
-                                               make_plots=(make_plots and itr==1 and noise in noise_arr[::10]), file_name=Xft_fnames[1]) )
+                                               make_plots=(make_plots and itr==0 and noise in noise_arr[::10]), file_name=Xft_fnames[1]) )
             residuals_MOND.append( GP_residuals(rad, velocities[itr], rad, pred_means_MOND, pred_bands_MOND) )
 
     # Transpose residuals arrays and extract required Xft residuals for DTW:
