@@ -48,10 +48,10 @@ def corr_radii(num_iterations:int, der:int, num_rad:int, res_fits, v_werr, make_
         rad_pearson[itr]  = stats.pearsonr(rad_corr[1], bar_ratio[10:])[0]
     
     # Extract 1-sigma percentiles and means from iterations.
-    bar_percentiles = np.percentile( bar_ratios,   [16.0, 50.0, 84.0], axis=0 )
-    corr_perc       = np.percentile( radii_corr,   [16.0, 50.0, 84.0], axis=0 )
-    spearman_perc   = np.percentile( rad_spearman, [16.0, 50.0, 84.0], axis=0 )
-    pearson_perc    = np.percentile( rad_pearson,  [16.0, 50.0, 84.0], axis=0 )
+    bar_percentiles = np.nanpercentile( bar_ratios,   [16.0, 50.0, 84.0], axis=0 )
+    corr_perc       = np.nanpercentile( radii_corr,   [16.0, 50.0, 84.0], axis=0 )
+    spearman_perc   = np.nanpercentile( rad_spearman, [16.0, 50.0, 84.0], axis=0 )
+    pearson_perc    = np.nanpercentile( rad_pearson,  [16.0, 50.0, 84.0], axis=0 )
 
     if make_plots:
         fig, (ax0, ax1, ax2) = plt.subplots(3, 1, sharex=True, gridspec_kw={'height_ratios': [5, 2, 3]})
@@ -101,7 +101,7 @@ def corr_radii(num_iterations:int, der:int, num_rad:int, res_fits, v_werr, make_
     
     # Return the 1-sigma percentiles of correlation coefficients across the whole RC (i.e. at r = rmax).
     full_corr = np.array(radii_corr)[:,:,-1]
-    full_corr_perc = np.percentile(full_corr, [16.0, 50.0, 84.0], axis=0)
+    full_corr_perc = np.nanpercentile(full_corr, [16.0, 50.0, 84.0], axis=0)
     return full_corr_perc.T
 
 
@@ -146,10 +146,10 @@ def corr_window(num_iterations:int, der:int, num_rad:int, res_fits, v_werr, win_
         win_pearson[itr]  = stats.pearsonr(win_corr[1], bar_ratio)[0]
     
     # Extract 1-sigma percentiles and means from iterations.
-    bar_percentiles = np.percentile( bar_ratios,   [16.0, 50.0, 84.0], axis=0 )
-    corr_perc       = np.percentile( window_corr,  [16.0, 50.0, 84.0], axis=0 )
-    spearman_perc   = np.percentile( win_spearman, [16.0, 50.0, 84.0], axis=0 )
-    pearson_perc    = np.percentile( win_pearson,  [16.0, 50.0, 84.0], axis=0 )
+    bar_percentiles = np.nanpercentile( bar_ratios,   [16.0, 50.0, 84.0], axis=0 )
+    corr_perc       = np.nanpercentile( window_corr,  [16.0, 50.0, 84.0], axis=0 )
+    spearman_perc   = np.nanpercentile( win_spearman, [16.0, 50.0, 84.0], axis=0 )
+    pearson_perc    = np.nanpercentile( win_pearson,  [16.0, 50.0, 84.0], axis=0 )
 
     if make_plots:
         fig, (ax0, ax1, ax2) = plt.subplots(3, 1, sharex=True, gridspec_kw={'height_ratios': [5, 2, 3]})
@@ -201,5 +201,5 @@ def corr_window(num_iterations:int, der:int, num_rad:int, res_fits, v_werr, win_
     window_corr = np.array(window_corr)
     mid_pt = math.floor( len(bar_ratio) / 2 )
     centre_corr = window_corr[:,:,mid_pt]
-    centre_corr_perc = np.percentile(centre_corr, [16.0, 50.0, 84.0], axis=0)
+    centre_corr_perc = np.nanpercentile(centre_corr, [16.0, 50.0, 84.0], axis=0)
     return centre_corr_perc.T
