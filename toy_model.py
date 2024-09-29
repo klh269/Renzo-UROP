@@ -297,10 +297,10 @@ half_noise = math.ceil( num_noise / 2 )
 
 # Summary plots.
 if apply_DTW:
-    dtw_costs   = np.percentile( dtw_costs,  [16.0, 50.0, 84.0], axis=0 )
-    Xft_costs   = np.percentile( Xft_costs,  [16.0, 50.0, 84.0], axis=0 )
-    dtw_window  = np.percentile( dtw_window, [16.0, 50.0, 84.0], axis=0 )
-    Xft_window  = np.percentile( Xft_window, [16.0, 50.0, 84.0], axis=0 )
+    dtw_costs   = np.nanpercentile( dtw_costs,  [16.0, 50.0, 84.0], axis=0 )
+    Xft_costs   = np.nanpercentile( Xft_costs,  [16.0, 50.0, 84.0], axis=0 )
+    dtw_window  = np.nanpercentile( dtw_window, [16.0, 50.0, 84.0], axis=0 )
+    Xft_window  = np.nanpercentile( Xft_window, [16.0, 50.0, 84.0], axis=0 )
 
     # DTW costs across entire RC vs noise (truncated).
     plt.title("Normalized DTW alignment costs")
