@@ -7,6 +7,16 @@ from scipy import stats
 from utils_analysis.Vobs_fits import MOND_vsq
 
 def toy_gen(rad, bump_loc, bump_size, bump_sigma, noise, num_iterations):
+    """
+    Returns the following constructed arrays:
+        - bump: Pure Gaussian bump (w/o RC)
+        - Vraw: RC (arctan curves) w/o feature
+        - velocities: RC WITH added feature (i.e. Vraw + bump)
+        - Vraw_werr: Vraw with Gaussian uncertainties
+        - v_werr: velocities with Gaussian uncertainties
+        - residuals: residuals of v_werr from perfect arctan fits
+        - res_Xft: residuals of Vraw_werr from perfect arctan fits
+    """
     # Generate Vbar with Gaussian bump.
     Vbar_raw = np.arctan(rad)
     Vbar_raw *= 100.0   # Multiplication factor for getting sensible MOND RC.
