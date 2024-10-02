@@ -15,6 +15,7 @@ import jax
 import numpyro
 import argparse
 
+import sys
 from resource import getrusage, RUSAGE_SELF
 # from tqdm import tqdm
 
@@ -25,15 +26,17 @@ from utils_analysis.dtw_utils import do_DTW
 from utils_analysis.correlations import corr_radii, corr_window
 
 matplotlib.use("Agg")
-memory_usage = []   # Track memory usage throughout programme.
+# memory_usage = []   # Track memory usage throughout programme.
 
 
-# Create array of sampling rates to sample from (change the index from 0 to 17 manually, or figure out how to use parallel processes...).
-samp_rate   = np.linspace(3, 20, 18, endpoint=True, dtype=int)[3]
+# Create array of sampling rates to sample from.
+# To run this as a loop in bash: for i in {0..27}; do addqueue -q cmb -c "1-3 days" -n 1 -m 8 toy_model.py $i; done
+samp_idx    = int(sys.argv[1])
+samp_rate   = np.linspace(3, 30, 28, endpoint=True, dtype=int)[samp_idx]
 num_samples = samp_rate * 10
 
 # Switches for running different parts of the analysis.
-use_MF       = True
+use_MF       = False
 use_GP       = False
 apply_DTW    = True
 corr_rad     = True
