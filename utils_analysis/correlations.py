@@ -7,6 +7,9 @@ import numpy as np
 from scipy import stats
 import matplotlib.pyplot as plt
 
+import warnings
+warnings.filterwarnings("ignore", message="An input array is constant; the correlation coefficient is not defined.")
+
 colors = [ 'tab:red', 'k' ]
 c_corr = [ 'mediumblue', 'tab:green' ]
 labels = [ 'Vbar', 'Vobs' ]
@@ -32,7 +35,7 @@ def corr_radii(num_iterations:int, der:int, num_rad:int, res_fits, v_werr, make_
     for itr in range(num_iterations):
         # Correlate Vobs and Vbar (d0, d1, d2) as a function of (maximum) radius, i.e. spheres of increasing r.
         rad_corr = [[], []]
-        for j in range(10, num_rad):
+        for j in range(5, num_rad):
             rad_corr[0].append(stats.spearmanr(res_fits[itr][der][0][:j], res_fits[itr][der][1][:j])[0])
             rad_corr[1].append(stats.pearsonr(res_fits[itr][der][0][:j], res_fits[itr][der][1][:j])[0])
         radii_corr[itr] = rad_corr
@@ -44,8 +47,8 @@ def corr_radii(num_iterations:int, der:int, num_rad:int, res_fits, v_werr, make_
         bar_ratios[itr] = bar_ratio
 
         # Correlate baryonic ratio with correlation coefficients.
-        rad_spearman[itr] = stats.spearmanr(rad_corr[0], bar_ratio[10:])[0]
-        rad_pearson[itr]  = stats.pearsonr(rad_corr[1], bar_ratio[10:])[0]
+        rad_spearman[itr] = stats.spearmanr(rad_corr[0], bar_ratio[5:])[0]
+        rad_pearson[itr]  = stats.pearsonr(rad_corr[1], bar_ratio[5:])[0]
     
     # Extract 1-sigma percentiles and means from iterations.
     bar_percentiles = np.nanpercentile( bar_ratios,   [16.0, 50.0, 84.0], axis=0 )
@@ -76,10 +79,10 @@ def corr_radii(num_iterations:int, der:int, num_rad:int, res_fits, v_werr, make_
         ax1.grid()
 
         # Plot correlations and Vbar/Vobs.
-        ax2.plot(rad[10:], corr_perc[1][0], color=c_corr[0], label=r"Spearman $\rho$")
-        ax2.plot(rad[10:], corr_perc[1][1], color=c_corr[1], label=r"Pearson $\rho$")
-        ax2.fill_between(rad[10:], corr_perc[0][0], corr_perc[2][0], color=c_corr[0], alpha=0.2)
-        ax2.fill_between(rad[10:], corr_perc[0][1], corr_perc[2][1], color=c_corr[1], alpha=0.2)
+        ax2.plot(rad[5:], corr_perc[1][0], color=c_corr[0], label=r"Spearman $\rho$")
+        ax2.plot(rad[5:], corr_perc[1][1], color=c_corr[1], label=r"Pearson $\rho$")
+        ax2.fill_between(rad[5:], corr_perc[0][0], corr_perc[2][0], color=c_corr[0], alpha=0.2)
+        ax2.fill_between(rad[5:], corr_perc[0][1], corr_perc[2][1], color=c_corr[1], alpha=0.2)
 
         sigma_spearman = max(spearman_perc - spearman_perc[1])
         sigma_pearson = max(pearson_perc - pearson_perc[1])
@@ -88,8 +91,8 @@ def corr_radii(num_iterations:int, der:int, num_rad:int, res_fits, v_werr, make_
     
         ax5 = ax2.twinx()
         ax5.set_ylabel(r'Average $v_{bar}/v_{obs}$')
-        ax5.plot(rad[10:], bar_percentiles[1][10:], '--', color=color_bar, label="Vbar/Vobs")
-        ax5.fill_between(rad[10:], bar_percentiles[0][10:], bar_percentiles[2][10:], color=color_bar, alpha=0.2)
+        ax5.plot(rad[5:], bar_percentiles[1][5:], '--', color=color_bar, label="Vbar/Vobs")
+        ax5.fill_between(rad[5:], bar_percentiles[0][5:], bar_percentiles[2][5:], color=color_bar, alpha=0.2)
         ax5.tick_params(axis='y', labelcolor=color_bar)
     
         ax2.legend(loc="upper left", bbox_to_anchor=(1.11, 1))
