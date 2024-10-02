@@ -43,7 +43,7 @@ def corr_radii(num_iterations:int, der:int, num_rad:int, res_fits, v_werr, make_
         # Compute baryonic dominance, i.e. average Vbar/Vobs(data) from centre to some max radius.
         bar_ratio = []
         for rd in range(num_rad):
-            bar_ratio.append(sum(v_werr[itr][1][:rd]/v_werr[itr][0][:rd]) / (rd+1))
+            bar_ratio.append(sum(v_werr[itr][0][:rd]/v_werr[itr][1][:rd]) / (rd+1))
         bar_ratios[itr] = bar_ratio
 
         # Correlate baryonic ratio with correlation coefficients.
@@ -141,7 +141,7 @@ def corr_window(num_iterations:int, der:int, num_rad:int, res_fits, v_werr, win_
         # Compute baryonic dominance, i.e. average Vbar/Vobs(data) from centre to some max radius.
         bar_ratio = []
         for j in range(wmin, wmax):
-            bar_ratio.append( sum( v_werr[itr][1][j-wmin:j+wmin] / v_werr[itr][0][j-wmin:j+wmin] ) / 11 )
+            bar_ratio.append( sum( v_werr[itr][0][j-wmin:j+wmin] / v_werr[itr][1][j-wmin:j+wmin] ) / 11 )
         bar_ratios[itr] = bar_ratio
 
         # Correlate baryonic ratio with correlation coefficients.
