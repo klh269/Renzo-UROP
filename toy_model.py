@@ -14,8 +14,6 @@ import matplotlib.pyplot as plt
 import jax
 import numpyro
 import argparse
-
-import sys
 from resource import getrusage, RUSAGE_SELF
 # from tqdm import tqdm
 
@@ -28,12 +26,6 @@ from utils_analysis.correlations import corr_radii, corr_window
 matplotlib.use("Agg")
 # memory_usage = []   # Track memory usage throughout programme.
 
-
-# Create array of sampling rates to sample from.
-# To run this as a loop in bash: for i in {0..27}; do addqueue -q cmb -c "1-3 days" -n 1 -m 8 toy_model.py $i; done
-samp_idx    = int(sys.argv[1])
-samp_rate   = np.linspace(3, 30, 28, endpoint=True, dtype=int)[samp_idx]
-num_samples = samp_rate * 10
 
 # Switches for running different parts of the analysis.
 use_MF       = False
@@ -60,16 +52,6 @@ if corr_rad or corr_win:
     deriv_dir = [ "d0", "d1", "d2" ]
     color_bar = "orange"
     if corr_win: window_size = 11
-
-# Print report of analyses used and some corresponding variables.
-print(f"[samp_rate = {samp_rate}] Running toy_model.py with the following methods:")
-if use_MF:     print(f" - Median filter (window length = {MF_size})")
-if use_GP:     print(" - Gaussian process")
-if apply_DTW:  print(" - Dynamic time warping")
-if corr_rad:   print(" - Correlation coefficients (increasing radii)")
-if corr_win:   print(f" - Correlation coefficients (moving window, length = {window_size})")
-if make_plots: print(" - Make plots")
-
 
 # Parameters for Gaussian bump (fixed feature) and noise (varying amplitudes).
 bump_size  = 20.0   # Defined in terms of percentage of max(Vbar)
@@ -103,11 +85,11 @@ dtw_costs,  Xft_costs  = np.zeros((num_iterations, num_noise)), np.zeros((num_it
 dtw_window, Xft_window = np.zeros((num_iterations, num_noise)), np.zeros((num_iterations, num_noise))
 
 
-# Initialize args for GP (if used).
+# Initialize args for GP (if used) and sampling rate.
 if use_GP:
     assert numpyro.__version__.startswith("0.15.0")
-    numpyro.enable_x64()
-    parser = argparse.ArgumentParser(description="Gaussian Process example") # To keep the inference from getting constant samples.
+    numpyro.enable_x64()    # To keep the inference from getting constant samples.
+    parser = argparse.ArgumentParser(description="Gaussian Process")
     parser.add_argument("-n", "--num-samples", nargs="?", default=1000, type=int)
     parser.add_argument("--num-warmup", nargs="?", default=1000, type=int)
     parser.add_argument("--num-chains", nargs="?", default=1, type=int)
@@ -122,10 +104,32 @@ if use_GP:
     )
     parser.add_argument("--no-cholesky", dest="use_cholesky", action="store_false")
     parser.add_argument("--testing", default=False, type=bool)
+    parser.add_argument("--samp-idx", type=int)
     args = parser.parse_args()
 
     numpyro.set_platform(args.device)
     numpyro.set_host_device_count(args.num_chains)
+
+else:
+    parser = argparse.ArgumentParser(description="Toy Model")
+    parser.add_argument("--samp-idx", type=int)
+    args = parser.parse_args()
+
+# Create array of sampling rates to sample from.
+# To run this as a loop in bash: for i in {0..27}; do addqueue -q cmb -c "1-3 days" -n 1 -m 8 toy_model.py --samp-idx $i; done
+samp_idx    = args.samp_idx
+samp_rate   = np.linspace(3, 30, 28, endpoint=True, dtype=int)[samp_idx]
+num_samples = samp_rate * 10
+
+
+# Print report of analyses used and some corresponding variables.
+print(f"[samp_rate = {samp_rate}] Running toy_model.py with the following methods:")
+if use_MF:     print(f" - Median filter (window length = {MF_size})")
+if use_GP:     print(" - Gaussian process")
+if apply_DTW:  print(" - Dynamic time warping")
+if corr_rad:   print(" - Correlation coefficients (increasing radii)")
+if corr_win:   print(f" - Correlation coefficients (moving window, length = {window_size})")
+if make_plots: print(" - Make plots")
 
 
 """
