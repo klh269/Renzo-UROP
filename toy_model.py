@@ -307,14 +307,20 @@ if apply_DTW:
     dtw_ftsig = abs( (dtw_costs[1] - Xft_costs[1]) / ((Xft_costs[2] - Xft_costs[0]) / 2) )
 
     # Save array for making 2D histograms later.
+    np.save(f"{fileloc}dtw_costs/num_samples={num_samples}", dtw_costs)
+    np.save(f"{fileloc}Xft_costs/num_samples={num_samples}", Xft_costs)
     np.save(f"{fileloc}dtw_ftsig/num_samples={num_samples}", dtw_ftsig)
 
 if corr_rad:
     rad_spearmans, rad_pearsons = np.array(rad_spearmans), np.array(rad_pearsons)
     rad_Xft_spearmans, rad_Xft_pearsons = np.array(rad_Xft_spearmans), np.array(rad_Xft_pearsons)
-    rad_ftsig = abs( (rad_pearsons[1] - rad_Xft_pearsons[1]) / ((rad_Xft_pearsons[2] - rad_Xft_pearsons[0]) / 2) )
+    rad_ftsig = abs( (rad_pearsons[0,:,1] - rad_Xft_pearsons[0,:,1]) / ((rad_Xft_pearsons[0,:,2] - rad_Xft_pearsons[0,:,0]) / 2) )
 
     # Save array for making 2D histograms later.
+    np.save(f"{fileloc}rad_pearsons/num_samples={num_samples}", rad_pearsons)
+    np.save(f"{fileloc}rad_Xft_pearsons/num_samples={num_samples}", rad_Xft_pearsons)
+    np.save(f"{fileloc}rad_spearmans/num_samples={num_samples}", rad_spearmans)
+    np.save(f"{fileloc}rad_Xft_spearmans/num_samples={num_samples}", rad_Xft_spearmans)
     np.save(f"{fileloc}rad_ftsig/num_samples={num_samples}", rad_ftsig)
 
 """
