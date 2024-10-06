@@ -65,13 +65,13 @@ def get_SPARC(ft_height:float = 0.2):
     return gal_list, SPARC_rates, SPARC_noise
 
 # Analysis switches.
-use_MF = False
+use_MF = True
 use_GP = False
 fname = fileloc(use_MF, use_GP)
 
 # Array of sampling rates and noise.
 noise_arr = np.linspace(0.0, 10.0, 51, endpoint=True) if use_GP else np.linspace(0.0, 10.0, 101, endpoint=True)
-samp_rates = np.linspace(30, 200, 18, endpoint=True, dtype=int)
+samp_rates = np.linspace(30, 300, 28, endpoint=True, dtype=int)
 
 # Get numbers from SPARC dataset.
 SPARC_ft = 0.2
@@ -85,7 +85,7 @@ arrays = [ ["dtw_costs/", "Xft_costs/"], ["rad_pearsons/", "rad_Xft_pearsons/"] 
 for sn in range(2):
     # Extract numpy arrays and combine into one big plottable 2D array.
     ft_significance = []
-    for smp in range(18):
+    for smp in range(28):
         num_samp = samp_rates[smp]
         # ftsig = np.load(f"{fname}{signames[sn]}/num_samples={num_samp}.npy")
         # ft_significance.append(ftsig)
@@ -101,7 +101,7 @@ for sn in range(2):
     ft_significance = np.clip( ft_significance, 1.0, 10.0 )
 
     if sn == 1: noise_arr = noise_arr[1:]
-    extent = [ 0.0, 0.5, 3.0, 20.0 ]
+    extent = [ 0.0, 0.5, 3.0, 30.0 ]
     
     plt.title("Feature significance: " + titles[sn])
     plt.imshow( ft_significance, interpolation='none', norm='linear', cmap='viridis',
@@ -116,6 +116,6 @@ for sn in range(2):
     for pt in range(len(gal_list)):
         if SPARC_noise[pt] < 0.2:
             plt.annotate(gal_list[pt], (SPARC_noise[pt], SPARC_rates[pt] + 0.2), color='red')
-    plt.legend()
+    plt.legend(loc='upper right')
     plt.savefig(f"{fname}{signames[sn]}.png")
     plt.close()
