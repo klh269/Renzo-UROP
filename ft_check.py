@@ -17,9 +17,9 @@ from utils_analysis.med_filter import med_filter
 
 
 # Switches for extracting features from different RCs.
-testing     = False
+testing     = True
 use_toy     = False
-use_SPARC   = True
+use_SPARC   = False
 
 
 def ft_check(rmax, arr, errV):
@@ -38,6 +38,28 @@ def ft_check(rmax, arr, errV):
 
     return np.concatenate( (peaks, troughs) ), properties
 
+
+if not (use_toy or use_SPARC):
+    rad = np.linspace(0.0, 4.0*np.pi, 50)
+    vel = np.sin(rad)
+    v_werr = np.random.normal(vel, 0.1)
+    peaks, properties = ft_check( max(rad), v_werr, 0.1 )
+    print(peaks, properties)
+
+    plt.title("Residuals ft_check test")
+    plt.plot(rad, vel, color='k', alpha=0.5)
+    plt.scatter(rad, v_werr, color='tab:blue', alpha=0.5)
+
+    for ft in range(len(peaks)):
+        lb = properties["left_bases"][ft] + 1
+        rb = properties["right_bases"][ft] + 1
+        plt.plot(rad[lb:rb], v_werr[lb:rb], color='red', alpha=0.5)
+        plt.hlines(y=properties["width_heights"], xmin=properties["left_ips"]*4.0*np.pi/50,
+                   xmax=properties["right_ips"]*4.0*np.pi/50, color = "C1")
+    
+    plt.savefig("/mnt/users/koe/test.png")
+    plt.close()
+    
 
 if use_toy:
     # Parameters for Gaussian bump (fixed feature) and noise (varying amplitudes).
@@ -94,7 +116,7 @@ if use_SPARC:
     pVbar, pVobs = galaxy_count, galaxy_count
 
     for i in tqdm(range(galaxy_count)):
-        g = "NGC2403" if testing else table["Galaxy"][i]
+        g = "NGC6946" if testing else table["Galaxy"][i]
 
         file_path = "/mnt/users/koe/data/"+g+"_rotmod.dat"
         rawdata = np.loadtxt(file_path)
@@ -108,10 +130,11 @@ if use_SPARC:
         have_peaks = True
 
         for res in range(2):
-            v_d0 = interpolate.pchip_interpolate(r, v_components[res], rad)
-            _, residuals = med_filter( rad, v_d0, axes=0 )
+            # v_d0 = interpolate.pchip_interpolate(r, v_components[res], rad)
+            # _, residuals = med_filter( rad, v_d0, axes=0 )
+            _, residuals = med_filter( r, v_components[res], axes=0 )
 
-            peaks, properties = ft_check( max(rad), np.array(residuals), np.array(data["errV"]) )
+            peaks, properties = ft_check( max(r), np.array(residuals), np.array(data["errV"]) )
             # print(f"Residual: {res}, Peaks Found: {peaks}, Number of Peaks: {len(peaks)}")  # Debugging line
     
             if len(peaks) == 0:
@@ -129,8 +152,8 @@ if use_SPARC:
                     lb = properties["left_bases"][ft]
                     rb = properties["right_bases"][ft]
                     plt.plot(rad[lb:rb], residuals[lb:rb], color='red', alpha=0.5)
-                    plt.hlines(y=properties["width_heights"], xmin=properties["left_ips"]/10,
-                            xmax=properties["right_ips"]/10, color = "C1")
+                    plt.hlines(y=properties["width_heights"], xmin=properties["left_ips"],
+                            xmax=properties["right_ips"], color = "C1")
                 
                 plt.savefig("/mnt/users/koe/test.png")
                 plt.close()
