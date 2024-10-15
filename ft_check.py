@@ -8,25 +8,26 @@ import pandas as pd
 import matplotlib.pyplot as plt
 from tqdm import tqdm
 
-from scipy import interpolate
 from scipy.signal import find_peaks
 
 from utils_analysis.toy_gen import toy_gen
 from utils_analysis.Vobs_fits import Vbar_sq
 from utils_analysis.med_filter import med_filter
+from utils_analysis.little_things import get_things
 
 
 # Switches for extracting features from different RCs.
-testing     = True
-use_toy     = False
-use_SPARC   = False
+testing    = False
+use_toy    = False
+use_SPARC  = True
+use_THINGS = False
 
 
-def ft_check(rmax, arr, errV):
-    min_width = 3*rmax/len(arr)
-    avg_errV = np.mean(errV)
-    peaks, prop1 = find_peaks( arr, height=avg_errV, width=min_width, rel_height=0.5 )
-    troughs, prop2 = find_peaks( -arr, height=avg_errV, width=min_width, rel_height=0.5 )
+def ft_check(arr, errV):
+    min_width = 2
+    min_height = 2.0 * errV
+    peaks, prop1 = find_peaks( arr, height=min_height, width=min_width, rel_height=0.5 )
+    troughs, prop2 = find_peaks( -arr, height=min_height, width=min_width, rel_height=0.5 )
     prop2["peak_heights"]  = - prop2["peak_heights"]
     prop2["width_heights"] = - prop2["width_heights"]
 
@@ -39,11 +40,11 @@ def ft_check(rmax, arr, errV):
     return np.concatenate( (peaks, troughs) ), properties
 
 
-if not (use_toy or use_SPARC):
+if not (use_toy or use_SPARC or use_THINGS):
     rad = np.linspace(0.0, 4.0*np.pi, 50)
     vel = np.sin(rad)
     v_werr = np.random.normal(vel, 0.1)
-    peaks, properties = ft_check( max(rad), v_werr, 0.1 )
+    peaks, properties = ft_check( v_werr, 0.1 )
     print(peaks, properties)
 
     plt.title("Residuals ft_check test")
@@ -78,23 +79,20 @@ if use_toy:
     num_iterations = 1
     bump, Vraw, velocities, Vraw_werr, v_werr, residuals, res_Xft = toy_gen(rad, bump_loc, bump_size, bump_sigma, noise, num_iterations)
 
-    # Vobs (w/ feature) residuals if it's generated perfectly by MOND.
-    MOND_res = (velocities[:,1,:] - Vraw[:,1,:])
-
-    peaks, properties = ft_check( max(rad), residuals[0][1], [noise] )
+    peaks, properties = ft_check( residuals[0][1], [noise] )
     print( peaks, properties )
 
     if testing:
-        lb = properties["left_bases"][0] + 1
-        rb = properties["right_bases"][0] + 1
-        # lb = int(properties["left_ips"][0])
-        # rb = int(properties["right_ips"][0])
-
         plt.title("Residuals ft_check test")
         plt.plot(rad, residuals[0][1], alpha=0.5)
-        plt.plot(rad[lb:rb], residuals[0][1][lb:rb], color='red', alpha=0.5)
-        plt.hlines(y=properties["width_heights"], xmin=(properties["left_ips"]+1)/10,
-                xmax=(properties["right_ips"]+1)/10, color = "C1")
+
+        for ft in range(len(peaks)):
+            lb = properties["left_bases"][ft] + 1
+            rb = properties["right_bases"][ft] + 1
+            plt.plot(rad[lb:rb], residuals[0][1][lb:rb], color='red', alpha=0.5)
+            plt.hlines(y=properties["width_heights"], xmin=(properties["left_ips"]+1)/10,
+                       xmax=(properties["right_ips"]+1)/10, color = "C1")
+            
         plt.savefig("/mnt/users/koe/test.png")
         plt.close()
 
@@ -112,11 +110,10 @@ if use_SPARC:
                 "Vdisk", "Vbul", "SBdisk", "SBbul" ]
 
     galaxy_count = 1 if testing else len(table["Galaxy"])
-    pgals = []
-    pVbar, pVobs = galaxy_count, galaxy_count
+    pgals, pgals_Vobs, pgals_Vbar = [], [], []
 
     for i in tqdm(range(galaxy_count)):
-        g = "NGC6946" if testing else table["Galaxy"][i]
+        g = "NGC2403" if testing else table["Galaxy"][i]
 
         file_path = "/mnt/users/koe/data/"+g+"_rotmod.dat"
         rawdata = np.loadtxt(file_path)
@@ -134,36 +131,53 @@ if use_SPARC:
             # _, residuals = med_filter( rad, v_d0, axes=0 )
             _, residuals = med_filter( r, v_components[res], axes=0 )
 
-            peaks, properties = ft_check( max(r), np.array(residuals), np.array(data["errV"]) )
+            peaks, properties = ft_check( np.array(residuals), np.array(data["errV"]) )
             # print(f"Residual: {res}, Peaks Found: {peaks}, Number of Peaks: {len(peaks)}")  # Debugging line
     
             if len(peaks) == 0:
                 have_peaks = False
-                if res == 0: pVbar -= 1
-                else: pVobs -= 1
 
             if testing and res == 1:
                 print(peaks, properties)
 
                 plt.title("Residuals ft_check test")
-                plt.errorbar(r, residuals, data["errV"], alpha=0.5, ls='none')
+                plt.errorbar(r, residuals, data["errV"], alpha=0.5, color='k')
 
                 for ft in range(len(peaks)):
                     lb = properties["left_bases"][ft]
                     rb = properties["right_bases"][ft]
                     plt.plot(rad[lb:rb], residuals[lb:rb], color='red', alpha=0.5)
-                    plt.hlines(y=properties["width_heights"], xmin=properties["left_ips"],
-                            xmax=properties["right_ips"], color = "C1")
+                    plt.hlines(y=properties["width_heights"], xmin=rad[np.round(properties["left_ips"]).astype(int)],
+                            xmax=rad[np.round(properties["right_ips"]).astype(int)], color = "C1")
                 
                 plt.savefig("/mnt/users/koe/test.png")
                 plt.close()
-            
-        # print(f"Final Have Peaks: {have_peaks}")  # Check the status before printing g
+
+            if len(peaks) > 0:
+                if res == 0: pgals_Vbar.append(g)
+                if res == 1: pgals_Vobs.append(g)
 
         if have_peaks:
             pgals.append(g)
 
-    print(f"Number of galaxies with features in both Vobs and Vbar: {len(pgals)}")
-    print(f"Number of galaxies with features in ONLY Vobs: {pVobs}")
-    print(f"Number of galaxies with features in ONLY Vbar: {pVbar}")
+    print(f"\nNumber of galaxies with features in Vobs: {len(pgals_Vobs)}")
+    print(pgals_Vobs)
+    print(f"\nNumber of galaxies with features in Vbar: {len(pgals_Vbar)}")
+    print(pgals_Vbar)
+    print(f"\nNumber of galaxies with features in both Vobs and Vbar: {len(pgals)}")
+    print(pgals)
+
+
+if use_THINGS:
+    pgals = []
+    galaxies, rad, errV, residuals = get_things()
+
+    for i in range(18):
+        peaks, properties = ft_check( np.array(residuals[i]), np.array(errV[i]) )
+        if len(peaks) > 0:
+            pgals.append(galaxies[i].upper())
+            print(f"Feature(s) found in galaxy {galaxies[i].upper()}:")
+            print(f"Feature properties: {properties}")
+    
+    print(f"Number of Little Things galaxies with features: {len(pgals)}")
     print(pgals)
