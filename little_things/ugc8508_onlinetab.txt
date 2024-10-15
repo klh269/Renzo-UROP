@@ -1,0 +1,24 @@
+# Galaxy: UGC8508
+# Distance: 2.6 Mpc
+# Mean Inclination: 67.6 degree
+# Mean PA: 123.2 degree
+#   R["]    R[kpc]  Vr[km/s]  err_Vr  Va[km/s]  err_Va  Vc[km/s]  err_Vc  Vd[km/s]  err_Vd   Sdens  err_Sdens
+   10.00     0.13     2.30     0.71     5.07     4.58     5.56     4.18    13.41     1.50     7.28     1.38
+   20.00     0.25     9.42     1.36     8.37     4.40    12.60     3.09    13.36     2.37     6.78     1.48
+   30.00     0.38    11.04     3.11    11.35     3.34    15.83     3.23    12.21     1.83     6.01     1.31
+   40.00     0.50    15.50     1.88    13.73     2.68    20.70     2.27    10.95     1.71     5.03     1.29
+   50.00     0.63    17.82     1.92    15.25     2.85    23.45     2.36     9.48     2.22     3.77     1.18
+   60.00     0.76    21.10     2.46    16.10     3.32    26.54     2.81     9.02     2.79     2.59     0.91
+   70.00     0.88    23.11     2.97    16.75     4.13    28.54     3.42     7.23     2.90     1.82     0.65
+   80.00     1.01    24.60     3.74    17.04     4.98    29.93     4.18     7.85     2.47     1.32     0.45
+   90.00     1.13    25.62     4.36    17.30     5.47    30.91     4.74     7.98     2.03     0.97     0.33
+  100.00     1.26    29.37     5.08    17.27     6.07    34.07     5.35     8.20     1.68     0.71     0.23
+  110.00     1.39    32.13     6.23    17.09     6.95    36.39     6.39     8.01     1.46     0.60     0.31
+# R["]: sampling radius in arcsec
+# R[kpc]: sampling radius in kpc
+# Vr: best-fit rotation velocity
+# Va: Asymmetric-drift correction term
+# Vc: Circular velocity (Vc^2=Vr^2+Va^2)
+# Vd: best-fit velocity dispersion
+# Sdens: HI surface density in Msun/pc2 (corrected for the primary beam attenuation)
+# Notes: The estimate of the Vr from 10 to 40 arcsec is highly uncertain because of the presence of strong kinematic  distortions in the inner disk. the Vr and the Vc should be used carefully.

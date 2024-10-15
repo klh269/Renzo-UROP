@@ -1,0 +1,20 @@
+# Galaxy: DDO210 (Aquarius dIrr)
+# Distance: 0.9 Mpc
+# Mean Inclination: 63.2 degree
+# Mean PA: 77.3 degree
+#   R["]    R[kpc]  Vr[km/s]  err_Vr  Va[km/s]  err_Va  Vc[km/s]  err_Vc  Vd[km/s]  err_Vd   Sdens  err_Sdens
+   30.00     0.13     3.31     1.68     1.42     2.08     3.60     1.75     6.42     0.46     3.54     0.54
+   40.00     0.17     3.47     1.83     2.84     3.25     4.48     2.50     6.29     0.62     3.17     0.56
+   50.00     0.22     3.90     1.08     4.87     3.36     6.24     2.70     6.65     0.66     2.80     0.57
+   60.00     0.26     4.40     1.17     7.51     3.25     8.70     2.86     6.71     0.91     2.36     0.65
+   70.00     0.31     4.82     1.44    10.63     4.70    11.67     4.33     5.78     1.23     1.92     0.70
+   80.00     0.35     4.53     1.40    13.76     6.76    14.49     6.44     5.71     1.87     1.51     0.73
+   90.00     0.39     5.56     1.56    15.86     8.81    16.80     8.22     4.71     1.25     1.15     0.74
+  100.00     0.44     3.87     1.83    17.37     9.74    17.80     9.52     7.95     0.42     0.86     0.70
+# R["]: sampling radius in arcsec
+# R[kpc]: sampling radius in kpc
+# Vr: best-fit rotation velocity
+# Va: Asymmetric-drift correction term
+# Vc: Circular velocity (Vc^2=Vr^2+Va^2)
+# Vd: best-fit velocity dispersion
+# Sdens: HI surface density in Msun/pc2 (corrected for the primary beam attenuation)

@@ -1,0 +1,27 @@
+# Galaxy: DDO126
+# Distance: 4.9 Mpc
+# Mean Inclination: 62.2 degree
+# Mean PA: 140.7 degree
+#   R["]    R[kpc]  Vr[km/s]  err_Vr  Va[km/s]  err_Va  Vc[km/s]  err_Vc  Vd[km/s]  err_Vd   Sdens  err_Sdens
+   20.00     0.48     6.01     2.48     4.90     2.05     7.75     2.32    11.96     0.60     5.06     1.01
+   30.00     0.71     9.65     4.48     6.31     2.01    11.53     3.91    10.86     1.18     5.04     1.07
+   40.00     0.95    14.57     4.66     7.63     1.73    16.44     4.20    10.70     1.37     4.76     1.44
+   50.00     1.19    19.94     4.55     8.72     1.28    21.77     4.20    10.46     1.10     4.26     1.17
+   60.00     1.43    23.13     3.80     9.60     1.26    25.05     3.54    10.15     1.10     3.91     1.03
+   70.00     1.66    28.03     2.60    10.49     1.42    29.93     2.49    10.19     0.97     3.70     1.12
+   80.00     1.90    29.07     1.95    11.36     1.72    31.21     1.92     9.10     1.26     3.66     1.10
+   90.00     2.14    31.84     1.31    12.12     2.06    34.07     1.43     8.27     1.04     3.63     1.39
+  100.00     2.38    32.61     1.68    12.73     2.56    35.00     1.82     7.79     0.62     3.36     1.39
+  110.00     2.61    33.59     1.58    13.08     2.97    36.05     1.82     8.02     1.01     2.84     1.11
+  120.00     2.85    35.31     1.57    13.40     3.20    37.77     1.85     7.56     1.05     2.25     1.02
+  130.00     3.09    36.37     2.31    13.51     3.46    38.79     2.47     8.05     4.00     1.74     1.01
+  140.00     3.33    36.82     2.99    13.49     3.51    39.22     3.06     8.05     0.78     1.29     0.86
+# R["]: sampling radius in arcsec
+# R[kpc]: sampling radius in kpc
+# Vr: best-fit rotation velocity
+# Va: Asymmetric-drift correction term
+# Vc: Circular velocity (Vc^2=Vr^2+Va^2)
+# Vd: best-fit velocity dispersion
+# Sdens: HI surface density in Msun/pc2 (corrected for the primary beam attenuation)
+# Notes: Vr from 20 to 60 arcsec has been calculated as the mean between the rotation of the approaching and receding sides of the galaxy, the quotes errors are the half of the difference between the two
+#values. 

@@ -1,0 +1,24 @@
+# Galaxy: DDO52
+# Distance: 10.3 Mpc
+# Mean Inclination: 55.1 degree
+# Mean PA: 6.5 degree
+#   R["]    R[kpc]  Vr[km/s]  err_Vr  Va[km/s]  err_Va  Vc[km/s]  err_Vc  Vd[km/s]  err_Vd   Sdens  err_Sdens
+    9.00     0.45    11.76     3.14     0.02     0.09    11.76     3.14     6.88     1.91     3.18     0.52
+   18.00     0.90    19.91     4.33     0.06     0.18    19.91     4.33     5.80     2.63     3.23     0.48
+   27.00     1.35    28.53     3.02     0.12     0.28    28.53     3.02     5.87     1.80     2.89     0.67
+   36.00     1.80    34.82     2.73     0.22     0.37    34.82     2.73     8.04     0.50     2.39     0.69
+   45.00     2.25    37.06     3.47     0.41     0.60    37.07     3.47     8.01     0.57     2.19     0.59
+   54.00     2.70    39.59     3.68     0.74     1.10    39.60     3.68     7.64     0.48     2.03     0.73
+   63.00     3.15    43.36     3.26     1.37     2.03    43.39     3.26     8.00     0.54     2.09     0.69
+   72.00     3.60    43.76     4.36     2.26     3.34    43.82     4.36     7.89     0.54     2.14     0.65
+   81.00     4.04    47.29     4.39     3.64     4.66    47.43     4.40     8.09     0.64     2.04     0.68
+   90.00     4.49    48.74     4.89     5.66     5.35    49.06     4.90     8.08     0.70     1.83     0.63
+   99.00     4.94    50.28     6.32     7.95     7.12    50.91     6.34     8.03     0.62     1.56     0.59
+  108.00     5.39    52.01     3.91    11.20    10.90    53.20     4.46     8.04     0.93     1.21     0.51
+# R["]: sampling radius in arcsec
+# R[kpc]: sampling radius in kpc
+# Vr: best-fit rotation velocity
+# Va: Asymmetric-drift correction term
+# Vc: Circular velocity (Vc^2=Vr^2+Va^2)
+# Vd: best-fit velocity dispersion
+# Sdens: HI surface density in Msun/pc2 (corrected for the primary beam attenuation)

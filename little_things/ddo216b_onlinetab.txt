@@ -1,0 +1,23 @@
+# Galaxy: DDO216 (Pegasus dIrr) scenario2 (See Iorio+16)
+# Distance: 1.1 Mpc
+# Mean Inclination: 69.9 degree
+# Mean PA: 124.8 degree
+#   R["]    R[kpc]  Vr[km/s]  err_Vr  Va[km/s]  err_Va  Vc[km/s]  err_Vc  Vd[km/s]  err_Vd   Sdens  err_Sdens
+   15.00     0.08     0.65     1.23     1.34     1.72     1.49     1.64     6.22     0.88     2.60     0.49
+   30.00     0.16     0.04     1.23     2.57     2.55     2.57     2.55     5.88     0.69     2.54     0.51
+   45.00     0.24     0.67     1.23     4.07     2.56     4.13     2.53     5.67     0.76     2.30     0.60
+   60.00     0.32     2.56     0.61     5.57     2.02     6.13     1.85     5.49     0.81     1.99     0.77
+   75.00     0.40     2.21     1.23     6.74     1.55     7.09     1.52     5.22     0.69     1.76     0.84
+   90.00     0.48     0.55     0.11     7.71     1.72     7.73     1.71     5.09     0.86     1.45     0.80
+  105.00     0.56     2.04     1.23     8.54     2.32     8.78     2.27     4.91     1.17     1.11     0.73
+  120.00     0.64     2.33     1.23     8.81     3.03     9.11     2.95     3.62     1.14     0.86     0.64
+  135.00     0.72     2.39     1.23     8.68     3.31     9.00     3.20     3.02     1.06     0.71     0.55
+  150.00     0.80     4.57     1.23     8.16     3.78     9.35     3.35     2.71     0.88     0.57     0.50
+# R["]: sampling radius in arcsec
+# R[kpc]: sampling radius in kpc
+# Vr: best-fit rotation velocity
+# Va: Asymmetric-drift correction term
+# Vc: Circular velocity (Vc^2=Vr^2+Va^2)
+# Vd: best-fit velocity dispersion
+# Sdens: HI surface density in Msun/pc2 (corrected for the primary beam attenuation)
+#See Iorio+16
