@@ -5,8 +5,8 @@ Simple median filter for fitting RCs (now tested in toy model).
 from scipy.ndimage import median_filter
 import matplotlib.pyplot as plt
 
-def med_filter(rad, arr, size:int, make_plots:bool=False, file_name:str=""):
-    arr_filtered = median_filter(arr, size=size, mode='nearest', axes=2)
+def med_filter(rad, arr, win_size:int=10, make_plots:bool=False, file_name:str="", axes:int=2):
+    arr_filtered = median_filter(arr, size=win_size, mode='nearest', axes=axes)
     residuals = arr - arr_filtered
 
     if make_plots:
