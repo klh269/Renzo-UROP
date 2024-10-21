@@ -60,10 +60,12 @@ bump_FWHM  = 0.5
 bump_sigma = bump_FWHM / (2.0 * np.sqrt(2.0 * np.log(2.0)))
 
 if use_GP:
-    noise_arr = np.linspace(0.0, bump_size/2, 51, endpoint=True)
+    height_arr = np.linspace(100.0, 2.0, 49, endpoint=True)
+    noise_arr = bump_size / height_arr
     num_iterations = 50
 else:
-    noise_arr = np.linspace(0.0, bump_size/2, 101, endpoint=True)
+    height_arr = np.linspace(100.0, 2.0, 99, endpoint=True)
+    noise_arr = bump_size / height_arr
     num_iterations = 200
 num_noise = len(noise_arr)
 
@@ -164,13 +166,13 @@ for i in range(num_noise):
         Xft_fname = fileloc+f"MF_fits/Xft/ratio={round(noise/bump_size, 2)}.png"
         
         if noise in noise_arr[::10]:
-            _, residuals     = med_filter(rad, v_werr, size=MF_size, make_plots=make_plots, file_name=file_name)
-            _, residuals_Xft = med_filter(rad, Vraw_werr, size=MF_size, make_plots=make_plots, file_name=Xft_fname)
+            _, residuals     = med_filter(rad, v_werr, win_size=MF_size, make_plots=make_plots, file_name=file_name)
+            _, residuals_Xft = med_filter(rad, Vraw_werr, win_size=MF_size, make_plots=make_plots, file_name=Xft_fname)
         else:
-            _, residuals     = med_filter(rad, v_werr, size=MF_size)
-            _, residuals_Xft = med_filter(rad, Vraw_werr, size=MF_size)
+            _, residuals     = med_filter(rad, v_werr, win_size=MF_size)
+            _, residuals_Xft = med_filter(rad, Vraw_werr, win_size=MF_size)
 
-        _, residuals_MOND = med_filter(rad, velocities, size=MF_size)
+        _, residuals_MOND = med_filter(rad, velocities, win_size=MF_size)
 
     # Apply GP regression.
     if use_GP:
