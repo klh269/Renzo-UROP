@@ -104,9 +104,9 @@ def GP_residuals(r, Y, rad, pred_means, pred_bands, make_plots:bool=False, file_
         ax0.grid()
 
         ax1.set_ylabel("Residuals")
+        ax1.set_xlabel("Radii (kpc)")
         for j in range(2):
-            ax1.scatter(r, residuals[j], color=colours[j], alpha=0.3)
-            ax1.plot(rad, residuals[j], color=colours[j], label=labels[j])
+            ax1.plot(r, residuals[j], color=colours[j], marker="o", alpha=0.5, label=labels[j])
 
         ax1.grid()
 
