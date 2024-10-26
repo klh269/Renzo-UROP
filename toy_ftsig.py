@@ -10,7 +10,6 @@ import matplotlib.pyplot as plt
 from scipy.ndimage import gaussian_filter
 
 from utils_analysis.little_things import get_things
-from utils_analysis.Vobs_fits import Vbar_sq
 
 """
 Define functions.
@@ -77,20 +76,21 @@ MAIN CODE.
 # Analysis switches.
 use_MF = False
 use_GP = False
-use_THINGS = True
-use_SPARC = True
+use_THINGS = False
+use_SPARC = False
 fname = fileloc(use_MF, use_GP)
 
 # Array of sampling rates and noise.
-noise_arr = np.linspace(0.0, 10.0, 51, endpoint=True) if use_GP else np.linspace(0.0, 10.0, 101, endpoint=True)
-# noise_arr = (10.0 / noise_arr[1:])[::-1]
-noise_arr = np.flip(noise_arr[1:])
-samp_rates = np.linspace(30, 300, 28, endpoint=True, dtype=int)
+# noise_arr = np.linspace(0.0, 10.0, 51, endpoint=True) if use_GP else np.linspace(0.0, 10.0, 101, endpoint=True)
+# height_arr = 10.0 / np.flip(noise_arr[1:])
+height_arr = np.linspace(2.0, 100.0, 49, endpoint=True) if use_GP else np.linspace(2.0, 100.0, 99, endpoint=True)
+noise_arr = 10.0 / np.flip(height_arr)
+samp_rates = np.linspace(10, 150, 15, endpoint=True, dtype=int)
 
-# Get numbers from SPARC dataset.
-SPARC_ft = 0.2
-gal_list, SPARC_rates, SPARC_noise = get_SPARC( ft_height=SPARC_ft )
-print(f"Number of SPARC galaxies shown in the plot = {len(gal_list)} / 175")
+# # Get numbers from SPARC dataset.
+# SPARC_ft = 0.2
+# gal_list, SPARC_rates, SPARC_noise = get_SPARC( ft_height=SPARC_ft )
+# print(f"Number of SPARC galaxies shown in the plot = {len(gal_list)} / 175")
 
 # Make 2D feature significance histograms.
 signames = [ "dtw_ftsig", "rad_ftsig" ]
@@ -99,11 +99,8 @@ arrays = [ ["dtw_costs/", "Xft_costs/"], ["rad_pearsons/", "rad_Xft_pearsons/"] 
 for sn in range(2):
     # Extract numpy arrays and combine into one big plottable 2D array.
     ft_significance = []
-    for smp in range(28):
+    for smp in range(15):
         num_samp = samp_rates[smp]
-        # ftsig = np.load(f"{fname}{signames[sn]}/num_samples={num_samp}.npy")
-        # ft_significance.append(ftsig)
-
         corr1 = np.load(f"{fname}{arrays[sn][0]}num_samples={num_samp}.npy")
         corr2 = np.load(f"{fname}{arrays[sn][1]}num_samples={num_samp}.npy")
         ftsig = get_significance(corr1, corr2, rhos=sn)
@@ -115,8 +112,8 @@ for sn in range(2):
     ft_significance = gaussian_filter(ft_significance, 0.8)
     ft_significance = np.clip( ft_significance, 1.0, 10.0 )
 
-    if sn == 0: ft_significance = ft_significance[:,:-1]
-    extent = [ max(noise_arr), min(noise_arr), 3.0, 30.0 ]
+    if sn == 1: height_arr = height_arr[:-1]
+    extent = [ min(height_arr), max(height_arr), min(samp_rates)/10.0, max(samp_rates)/10.0 ]
     
     plt.title("Feature significance: " + titles[sn])
     plt.imshow( ft_significance, interpolation='none', norm='linear', cmap='viridis',
@@ -125,12 +122,13 @@ for sn in range(2):
     plt.ylabel("Sampling rate (# samples / ft FWHM)")
     plt.colorbar()
 
-    xticks = np.linspace(max(noise_arr), min(noise_arr), 9)
-    plt.xticks(ticks=xticks, labels=np.round(10.0/xticks, 1))
-    yticks = np.array([5, 10, 15, 20, 25, 30])
+    # xticks = np.linspace(min(noise_arr[1:]), max(noise_arr), 9)
+    # plt.xticks(ticks=xticks, labels=np.round(10.0/xticks[::-1], 1))
+    yticks = np.array([5, 10, 15])
     plt.yticks(ticks=yticks, labels=yticks/2)
-    
-    contours = plt.contour( noise_arr, samp_rates/10.0, ft_significance, 9,
+    # plt.grid()
+
+    contours = plt.contour( height_arr, samp_rates/10.0, ft_significance, 9,
                             origin='lower', extent=extent, colors='black' )
     plt.clabel(contours, inline=1, fontsize=10)
     # plt.scatter(np.array(SPARC_noise), SPARC_rates, color='red', label="SPARC galaxies (assuming ft height = 0.1)")
@@ -139,6 +137,7 @@ for sn in range(2):
     #         plt.annotate(gal_list[pt], (SPARC_noise[pt], SPARC_rates[pt] + 0.2), color='red')
 
     # plt.legend(loc='upper right')
+    plt.xscale("log")
     plt.savefig(f"{fname}{signames[sn]}.png")
     plt.close()
 
@@ -156,8 +155,8 @@ if use_THINGS:
 
         sampling_rate = len(r) / (max(r) - min(r))
         smp_idx = np.nonzero(sampling_rate < samp_rates/10.0)[0][0]
-        sig_idx2 = np.nonzero(ft_significance[smp_idx] > 2.0)[0][0]
-        sig_idx5 = np.where(ft_significance[smp_idx, :] > 5.0)[0][0]
+        sig_idx2 = np.nonzero(ft_significance[smp_idx] >= 2.0)[0][0]
+        sig_idx5 = np.where(ft_significance[smp_idx] >= 5.0)[0][0]
         sigma_2.append( 10.0 / noise_arr[sig_idx2] )
         sigma_5.append( 10.0 / noise_arr[sig_idx5] )
 
@@ -204,8 +203,8 @@ if use_SPARC:
 
         sampling_rate = len(r) / (max(r) - min(r))
         smp_idx = np.nonzero(sampling_rate < samp_rates/10.0)[0][0]
-        sig_idx2 = np.nonzero(ft_significance[smp_idx] > 2.0)[0][0]
-        sig_idx5 = np.where(ft_significance[smp_idx, :] > 5.0)[0][0]
+        sig_idx2 = np.nonzero(ft_significance[smp_idx] >= 2.0)[0][0]
+        sig_idx5 = np.where(ft_significance[smp_idx] >= 5.0)[0][0]
         sigma_2.append( 10.0 / noise_arr[sig_idx2] )
         sigma_5.append( 10.0 / noise_arr[sig_idx5] )
 
