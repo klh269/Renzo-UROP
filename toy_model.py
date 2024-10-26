@@ -28,7 +28,7 @@ matplotlib.use("Agg")
 
 
 # Switches for running different parts of the analysis.
-use_MF       = False
+use_MF       = True
 use_GP       = False
 apply_DTW    = True
 corr_rad     = True
@@ -36,55 +36,7 @@ corr_win     = False
 make_plots   = False
 make_summary = False
 
-# File names for different analysis methods.
 fileloc = "/mnt/users/koe/plots/toy_model/2Dsig/"
-if use_MF and use_GP:
-    raise Exception("GP and median filter cannot be used simultaneously!")
-elif use_MF:
-    fileloc += "use_MF/"
-    MF_size = 20    # Define window size for median filter (if used).
-elif use_GP:
-    fileloc += "use_GP/"
-
-if corr_rad or corr_win:
-    colors = [ 'tab:red', 'k' ]
-    labels = [ 'Vbar', 'Vobs' ]
-    deriv_dir = [ "d0", "d1", "d2" ]
-    color_bar = "orange"
-    if corr_win: window_size = 11
-
-# Parameters for Gaussian bump (fixed feature) and noise (varying amplitudes).
-bump_size  = 20.0   # Defined in terms of percentage of max(Vbar)
-bump_loc   = 5.0
-bump_FWHM  = 0.5
-bump_sigma = bump_FWHM / (2.0 * np.sqrt(2.0 * np.log(2.0)))
-
-if use_GP:
-    height_arr = np.linspace(100.0, 2.0, 49, endpoint=True)
-    noise_arr = bump_size / height_arr
-    num_iterations = 50
-else:
-    height_arr = np.linspace(100.0, 2.0, 99, endpoint=True)
-    noise_arr = bump_size / height_arr
-    num_iterations = 200
-num_noise = len(noise_arr)
-
-print(f"\nCorrelating RCs with {num_noise} noise levels from 0.0 to 0.5 * ft height, each with {num_iterations} iterations.")
-
-
-# Initialize arrays for summary plots.
-rad_spearmans     = [ [ [] for _ in range(num_noise-1) ] for _ in range(3) ]
-rad_pearsons      = [ [ [] for _ in range(num_noise-1) ] for _ in range(3) ]
-rad_Xft_spearmans = [ [ [] for _ in range(num_noise-1) ] for _ in range(3) ]
-rad_Xft_pearsons  = [ [ [] for _ in range(num_noise-1) ] for _ in range(3) ]
-
-win_spearmans     = [ [ [] for _ in range(num_noise-1) ] for _ in range(3) ]
-win_pearsons      = [ [ [] for _ in range(num_noise-1) ] for _ in range(3) ]
-win_Xft_spearmans = [ [ [] for _ in range(num_noise-1) ] for _ in range(3) ]
-win_Xft_pearsons  = [ [ [] for _ in range(num_noise-1) ] for _ in range(3) ]
-
-dtw_costs,  Xft_costs  = np.zeros((num_iterations, num_noise)), np.zeros((num_iterations, num_noise))
-dtw_window, Xft_window = np.zeros((num_iterations, num_noise)), np.zeros((num_iterations, num_noise))
 
 
 # Initialize args for GP (if used) and sampling rate.
@@ -106,6 +58,7 @@ if use_GP:
     )
     parser.add_argument("--no-cholesky", dest="use_cholesky", action="store_false")
     parser.add_argument("--testing", default=False, type=bool)
+    parser.add_argument("--ft-width", default=10, type=float)
     parser.add_argument("--samp-idx", type=int)
     args = parser.parse_args()
 
@@ -114,13 +67,71 @@ if use_GP:
 
 else:
     parser = argparse.ArgumentParser(description="Toy Model")
+    parser.add_argument("--ft-width", default=10, type=float)
     parser.add_argument("--samp-idx", type=int)
     args = parser.parse_args()
+    
+
+# Parameters for Gaussian bump (fixed feature) and noise (varying amplitudes).
+bump_size  = 20.0   # Defined in terms of percentage of max(Vbar)
+bump_loc   = 5.0
+bump_FWHM  = args.ft_width
+fileloc += f"FWHM={bump_FWHM}"  # Save arrays to different directories for different feature widths.
+bump_FWHM /= 10
+bump_sigma = bump_FWHM / (2.0 * np.sqrt(2.0 * np.log(2.0)))
+
+
+# File names for different analysis methods.
+if use_MF and use_GP:
+    raise Exception("GP and median filter cannot be used simultaneously!")
+elif use_MF:
+    fileloc += "use_MF/"
+    MF_size = 20    # Define window size for median filter (if used).
+elif use_GP:
+    fileloc += "use_GP/"
+
+# Generate noise from 1 / uniform height array (less samples for GP due to demanding runtime).
+if use_GP:
+    height_arr = np.linspace(100.0, 2.0, 49, endpoint=True)
+    noise_arr = bump_size / height_arr
+    num_iterations = 50
+else:
+    height_arr = np.linspace(100.0, 2.0, 99, endpoint=True)
+    noise_arr = bump_size / height_arr
+    num_iterations = 200
+num_noise = len(noise_arr)
+
+# Variables for corelation plots and win_size = size of moving window for correlations (if used).
+if corr_rad or corr_win:
+    colors = [ 'tab:red', 'k' ]
+    labels = [ 'Vbar', 'Vobs' ]
+    deriv_dir = [ "d0", "d1", "d2" ]
+    color_bar = "orange"
+    if corr_win: window_size = 11
+
+# print(f"\nCorrelating RCs with {num_noise} noise levels from 0.0 to 0.5 * ft height, each with {num_iterations} iterations.")
+print(f"Correlating RCs with features of FWHM = {bump_FWHM}")
+
+
+# Initialize arrays for summary plots.
+rad_spearmans     = [ [ [] for _ in range(num_noise-1) ] for _ in range(3) ]
+rad_pearsons      = [ [ [] for _ in range(num_noise-1) ] for _ in range(3) ]
+rad_Xft_spearmans = [ [ [] for _ in range(num_noise-1) ] for _ in range(3) ]
+rad_Xft_pearsons  = [ [ [] for _ in range(num_noise-1) ] for _ in range(3) ]
+
+win_spearmans     = [ [ [] for _ in range(num_noise-1) ] for _ in range(3) ]
+win_pearsons      = [ [ [] for _ in range(num_noise-1) ] for _ in range(3) ]
+win_Xft_spearmans = [ [ [] for _ in range(num_noise-1) ] for _ in range(3) ]
+win_Xft_pearsons  = [ [ [] for _ in range(num_noise-1) ] for _ in range(3) ]
+
+dtw_costs,  Xft_costs  = np.zeros((num_iterations, num_noise)), np.zeros((num_iterations, num_noise))
+dtw_window, Xft_window = np.zeros((num_iterations, num_noise)), np.zeros((num_iterations, num_noise))
+
 
 # Create array of sampling rates to sample from.
-# To run this as a loop in bash: for i in {0..27}; do addqueue -q cmb -c "1-3 days" -n 1 -m 8 toy_model.py --samp-idx $i; done
+# To run this as a loop in bash: for i in {0..29}; do addqueue -q cmb -c "1-3 days" -n 1 -m 8 toy_model.py --ft-width {?} --samp-idx $i; done
 samp_idx    = args.samp_idx
-samp_rate   = np.linspace(3, 30, 28, endpoint=True, dtype=int)[samp_idx]
+samp_rate   = np.linspace(1, 30, 30, endpoint=True, dtype=int)[samp_idx]
 num_samples = samp_rate * 10
 
 
@@ -132,6 +143,20 @@ if apply_DTW:  print(" - Dynamic time warping")
 if corr_rad:   print(" - Correlation coefficients (increasing radii)")
 if corr_win:   print(f" - Correlation coefficients (moving window, length = {window_size})")
 if make_plots: print(" - Make plots")
+
+
+# Simple code for calculating feature significance by comparing costs/correlation coefficients
+# between (Vobs w/ ft + Vbar w/ ft) and (Vobs W/O ft + Vbar w/ ft).
+def get_significance(corr1, corr2, rhos:bool=True):
+    if rhos == True:
+        sigma1 = (corr1[0,:,2] - corr1[0,:,0]) / 2
+        sigma2 = (corr2[0,:,2] - corr2[0,:,0]) / 2
+        ftsig = abs(( corr2[0,:,1] - corr1[0,:,1] )) / np.sqrt(sigma1**2 + sigma2**2)
+    else:
+        sigma1 = (corr1[2] - corr1[0]) / 2
+        sigma2 = (corr2[2] - corr2[0]) / 2
+        ftsig = abs(( corr2[1] - corr1[1] )) / np.sqrt(sigma1**2 + sigma2**2)
+    return ftsig
 
 
 """
@@ -306,23 +331,25 @@ Calculate feature significance.
 if apply_DTW:
     dtw_costs   = np.nanpercentile( dtw_costs,  [16.0, 50.0, 84.0], axis=0 )
     Xft_costs   = np.nanpercentile( Xft_costs,  [16.0, 50.0, 84.0], axis=0 )
-    dtw_ftsig = abs( (dtw_costs[1] - Xft_costs[1]) / ((Xft_costs[2] - Xft_costs[0]) / 2) )
+    # dtw_ftsig = abs( (dtw_costs[1] - Xft_costs[1]) / ((Xft_costs[2] - Xft_costs[0]) / 2) )
+    dtw_ftsig = get_significance(dtw_costs, Xft_costs, rhos=False)
 
     # Save array for making 2D histograms later.
-    np.save(f"{fileloc}dtw_costs/num_samples={num_samples}", dtw_costs)
-    np.save(f"{fileloc}Xft_costs/num_samples={num_samples}", Xft_costs)
+    # np.save(f"{fileloc}dtw_costs/num_samples={num_samples}", dtw_costs)
+    # np.save(f"{fileloc}Xft_costs/num_samples={num_samples}", Xft_costs)
     np.save(f"{fileloc}dtw_ftsig/num_samples={num_samples}", dtw_ftsig)
 
 if corr_rad:
     rad_spearmans, rad_pearsons = np.array(rad_spearmans), np.array(rad_pearsons)
     rad_Xft_spearmans, rad_Xft_pearsons = np.array(rad_Xft_spearmans), np.array(rad_Xft_pearsons)
-    rad_ftsig = abs( (rad_pearsons[0,:,1] - rad_Xft_pearsons[0,:,1]) / ((rad_Xft_pearsons[0,:,2] - rad_Xft_pearsons[0,:,0]) / 2) )
+    # rad_ftsig = abs( (rad_pearsons[0,:,1] - rad_Xft_pearsons[0,:,1]) / ((rad_Xft_pearsons[0,:,2] - rad_Xft_pearsons[0,:,0]) / 2) )
+    rad_ftsig = get_significance(rad_pearsons, rad_Xft_pearsons, rhos=True)
 
     # Save array for making 2D histograms later.
-    np.save(f"{fileloc}rad_pearsons/num_samples={num_samples}", rad_pearsons)
-    np.save(f"{fileloc}rad_Xft_pearsons/num_samples={num_samples}", rad_Xft_pearsons)
-    np.save(f"{fileloc}rad_spearmans/num_samples={num_samples}", rad_spearmans)
-    np.save(f"{fileloc}rad_Xft_spearmans/num_samples={num_samples}", rad_Xft_spearmans)
+    # np.save(f"{fileloc}rad_pearsons/num_samples={num_samples}", rad_pearsons)
+    # np.save(f"{fileloc}rad_Xft_pearsons/num_samples={num_samples}", rad_Xft_pearsons)
+    # np.save(f"{fileloc}rad_spearmans/num_samples={num_samples}", rad_spearmans)
+    # np.save(f"{fileloc}rad_Xft_spearmans/num_samples={num_samples}", rad_Xft_spearmans)
     np.save(f"{fileloc}rad_ftsig/num_samples={num_samples}", rad_ftsig)
 
 """
