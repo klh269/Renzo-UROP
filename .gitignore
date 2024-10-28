@@ -6,4 +6,3 @@ test.py
 /slurm_output
 .DS_Store
 test.png
-*.png
