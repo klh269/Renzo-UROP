@@ -14,20 +14,9 @@ from utils_analysis.little_things import get_things
 """
 Define functions.
 """
-def get_significance(corr1, corr2, rhos:bool=True):
-    if rhos == True:
-        sigma1 = (corr1[0,:,2] - corr1[0,:,0]) / 2
-        sigma2 = (corr2[0,:,2] - corr2[0,:,0]) / 2
-        ftsig = abs(( corr2[0,:,1] - corr1[0,:,1] )) / np.sqrt(sigma1**2 + sigma2**2)
-    else:
-        sigma1 = (corr1[2] - corr1[0]) / 2
-        sigma2 = (corr2[2] - corr2[0]) / 2
-        ftsig = abs(( corr2[1] - corr1[1] )) / np.sqrt(sigma1**2 + sigma2**2)
-    return ftsig
-
 #  Determine the file location for array extraction
-def fileloc(use_MF:bool, use_GP:bool):
-    loc = "/mnt/users/koe/plots/toy_model/2Dsig/"
+def fileloc(bump_FWHM:float, use_MF:bool, use_GP:bool):
+    loc = f"/mnt/users/koe/plots/toy_model/2Dsig/FWHM={bump_FWHM}/"
     if use_MF and use_GP: raise Exception("GP and MF cannot both be True!")
     elif use_MF: loc += "use_MF/"
     elif use_GP: loc += "use_GP/"
@@ -74,18 +63,18 @@ def get_SPARC(ft_height:float = 0.1):
 MAIN CODE.
 """
 # Analysis switches.
-use_MF = False
+use_MF = True
 use_GP = False
 use_THINGS = False
 use_SPARC = False
-fname = fileloc(use_MF, use_GP)
+
+bump_FWHM = 5.0
+fname = fileloc(bump_FWHM, use_MF, use_GP)
 
 # Array of sampling rates and noise.
-# noise_arr = np.linspace(0.0, 10.0, 51, endpoint=True) if use_GP else np.linspace(0.0, 10.0, 101, endpoint=True)
-# height_arr = 10.0 / np.flip(noise_arr[1:])
 height_arr = np.linspace(2.0, 100.0, 49, endpoint=True) if use_GP else np.linspace(2.0, 100.0, 99, endpoint=True)
 noise_arr = 10.0 / np.flip(height_arr)
-samp_rates = np.linspace(10, 150, 15, endpoint=True, dtype=int)
+samp_rates = np.linspace(10, 300, 30, endpoint=True, dtype=int)
 
 # # Get numbers from SPARC dataset.
 # SPARC_ft = 0.2
@@ -99,34 +88,27 @@ arrays = [ ["dtw_costs/", "Xft_costs/"], ["rad_pearsons/", "rad_Xft_pearsons/"] 
 for sn in range(2):
     # Extract numpy arrays and combine into one big plottable 2D array.
     ft_significance = []
-    for smp in range(15):
+    for smp in range(30):
         num_samp = samp_rates[smp]
-        corr1 = np.load(f"{fname}{arrays[sn][0]}num_samples={num_samp}.npy")
-        corr2 = np.load(f"{fname}{arrays[sn][1]}num_samples={num_samp}.npy")
-        ftsig = get_significance(corr1, corr2, rhos=sn)
+        ftsig = np.load(f"{fname}{signames[sn]}/num_samples={num_samp}.npy")
         ft_significance.append(ftsig)
     
-    ft_significance = np.array(ft_significance)
     ft_significance = np.fliplr(ft_significance)
     ft_significance = np.nan_to_num(ft_significance, nan=np.inf, posinf=np.inf)
     ft_significance = gaussian_filter(ft_significance, 0.8)
     ft_significance = np.clip( ft_significance, 1.0, 10.0 )
 
-    if sn == 1: height_arr = height_arr[:-1]
     extent = [ min(height_arr), max(height_arr), min(samp_rates)/10.0, max(samp_rates)/10.0 ]
     
-    plt.title("Feature significance: " + titles[sn])
+    plt.title(f"Feature significance: {titles[sn]} (ft width = {bump_FWHM/10})")
     plt.imshow( ft_significance, interpolation='none', norm='linear', cmap='viridis',
                 origin='lower', extent=extent, aspect='auto' )
     plt.xlabel("Feature / noise ratio")
     plt.ylabel("Sampling rate (# samples / ft FWHM)")
     plt.colorbar()
 
-    # xticks = np.linspace(min(noise_arr[1:]), max(noise_arr), 9)
-    # plt.xticks(ticks=xticks, labels=np.round(10.0/xticks[::-1], 1))
-    yticks = np.array([5, 10, 15])
-    plt.yticks(ticks=yticks, labels=yticks/2)
-    # plt.grid()
+    yticks = np.array([5, 10, 15, 20, 25, 30])
+    plt.yticks(ticks=yticks, labels=yticks*bump_FWHM/10)
 
     contours = plt.contour( height_arr, samp_rates/10.0, ft_significance, 9,
                             origin='lower', extent=extent, colors='black' )
