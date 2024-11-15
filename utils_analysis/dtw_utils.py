@@ -53,6 +53,7 @@ def dtw(dist_mat):
 
 def do_DTW(itr:int, length:int, arr1, arr2, window:bool, make_plots=False, file_names=""):
     # arr1 and arr2 are 2D array-like objects of size (iterations x length);
+    # arr2 should be residuals from MOND fit on Vbar as we defined it to have cost = 0;
     # this function is to be called within a loop over said iterations.
     # file_names should be a list of strings in the order: [ matrix, alignment ].
     dist_mat_fwd = np.zeros((length, length))

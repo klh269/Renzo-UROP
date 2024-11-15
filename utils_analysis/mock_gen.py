@@ -17,10 +17,7 @@ def Vbar_sq_unc(table, i_table, data, bulged=False, num_samples=num_samples):
     # Sample mass-to-light ratios
     dist_pdisk = np.random.normal(pdisk, 0.125, size=num_samples)
     dist_pgas = np.random.normal(1., 0.04, size=num_samples)
-    if bulged:
-        dist_pbul = np.random.normal(pbul, 0.175, size=num_samples)
-    else:
-        dist_pbul = np.zeros(num_samples)
+    dist_pbul = np.random.normal(pbul, 0.175, size=num_samples)
 
     # Sample luminosity
     L36 = stats.truncnorm.rvs(-table["L"][i_table] / table["e_L"][i_table], np.inf, table["L"][i_table], table["e_L"][i_table], size=num_samples)
@@ -33,11 +30,11 @@ def Vbar_sq_unc(table, i_table, data, bulged=False, num_samples=num_samples):
     dist_scaling = np.full((len(data["Vdisk"]), num_samples), dist_scale)
 
     dist_pdisk = np.array([dist_pdisk] * len(data["Vdisk"]))
-    dist_pbul = np.array([dist_pbul] * len(data["Vbul"]))
+    dist_pbul = np.array([dist_pbul] * len(data["Vbul"])) if bulged else 0.
     dist_pgas = np.array([dist_pgas] * len(data["Vgas"]))
 
     Vdisk = np.array([data["Vdisk"]] * num_samples).T
-    Vbul = np.array([data["Vbul"]] * num_samples).T
+    Vbul = np.array([data["Vbul"]] * num_samples).T if bulged else 0.
     Vgas = np.array([data["Vgas"]] * num_samples).T
 
     Vbar_squared = (dist_pdisk * Vdisk**2
@@ -47,7 +44,6 @@ def Vbar_sq_unc(table, i_table, data, bulged=False, num_samples=num_samples):
 
     return Vbar_squared
 
-
 def MOND_unc(r, Vbar2_unc, num_samples=num_samples):
     r_unc = np.array([r] * num_samples).T
     acc = Vbar2_unc / r_unc
@@ -55,7 +51,6 @@ def MOND_unc(r, Vbar2_unc, num_samples=num_samples):
     nu = 1 + np.sqrt((1 + 4/y))
     nu /= 2
     return np.sqrt(acc * nu * r_unc)
-
 
 # Scatter a Vobs array with Gaussian noise of width data["errV"].
 def Vobs_scat(Vobs, errV, num_samples=num_samples):

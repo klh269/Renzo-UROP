@@ -15,7 +15,7 @@ from .params import G, pdisk, pbul, a0, RHO200C, LITTLE_H
 
 
 # Calculate baryonic matter from data of individual galaxies.
-def Vbar_sq(arr, bulged):
+def Vbar_sq(arr, bulged:bool=False):
     if bulged:
         v_sq = arr["Vgas"]**2 + arr["Vdisk"]**2 * pdisk + arr["Vbul"]**2 * pbul
     else:
