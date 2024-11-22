@@ -69,12 +69,12 @@ def main(g, r, v_data, v_mock, num_samples=num_samples):
 
     lb, rb, widths = ft_check(res_data[1], v_data[2])
     if len(lb)>0:
-        print(f"\nFeature found in Vobs of {g}")
+        print(f"Feature found in Vobs of {g}")
         print(f"Properties: lb={lb}, rb={rb}, widths={widths}")
 
     lb, rb, widths = ft_check(res_data[0], res_errors[1,0])
     if len(lb)>0:
-        print(f"\nFeature found in Vbar of {g}")
+        print(f"Feature found in Vbar of {g}")
         print(f"Properties: lb={lb}, rb={rb}, widths={widths}")
 
 
@@ -101,15 +101,56 @@ def main(g, r, v_data, v_mock, num_samples=num_samples):
                     dist_LCDM[n, m] = np.abs(res_LCDM[n][smp] - res_MOND[m][smp])
             
             dist_mats = np.array([ dist_data, dist_MOND, dist_LCDM ])
-            # mats_dir = [ "data/", "MOND/", "LCDM/" ]
+            mats_dir = [ "data/", "MOND/", "LCDM/" ]
             
             # DTW!
             for j in range(3):
                 path, cost_mat = dtw(dist_mats[j])
-                # x_path, y_path = zip(*path)
+                x_path, y_path = zip(*path)
                 cost = cost_mat[ len(r)-1, len(r)-1 ]
                 dtw_cost_smp[j].append(cost)
                 norm_cost_smp[j].append(cost / (2 * len(r)))
+
+                if make_plots and smp == 0:
+                    # Plot distance matrix and cost matrix with optimal path.
+                    plt.title("Dynamic time warping: "+g)
+                    plt.axis('off')
+
+                    plt.subplot(121)
+                    plt.title("Distance matrix")
+                    plt.imshow(dist_mats[j], cmap=plt.cm.binary, interpolation="nearest", origin="lower")
+
+                    plt.subplot(122)
+                    plt.title("Cost matrix")
+                    plt.imshow(cost_mat, cmap=plt.cm.binary, interpolation="nearest", origin="lower")
+                    plt.plot(x_path, y_path)
+
+                    plt.savefig(fileloc+"dtw/matrix_"+mats_dir[j]+g+".png", dpi=300, bbox_inches="tight")
+                    plt.close('all')
+
+                    # Visualize DTW alignment.
+                    plt.title("DTW alignment: "+g)
+
+                    if j == 0:
+                        diff = abs(max(np.array(res_MOND)[:,smp]) - min(res_Vobs))
+                        for x_i, y_j in path:
+                            plt.plot([x_i, y_j], [res_Vobs[x_i] + diff, res_MOND[y_j][smp] - diff], c="C7", alpha=0.4)
+                        plt.plot(np.arange(len(r)), np.array(res_Vobs) + diff, c='k', label=v_comps[3])
+
+                    else: 
+                        abs(max(np.array(res_MOND)[:,smp]) - min(np.array(res_mock)[j,:,smp]))
+                        for x_i, y_j in path:
+                            plt.plot([x_i, y_j], [res_mock[j][x_i][smp] + diff, res_MOND[y_j][smp] - diff], c="C7", alpha=0.4)
+                        plt.plot(np.arange(len(r)), np.array(res_mock)[j,:,smp] + diff, c=colours[j], label=v_comps[j])
+
+                    plt.plot(np.arange(len(r)), np.array(res_MOND)[:,smp] - diff, c="mediumblue", label="MOND")
+                    plt.plot([], [], c='w', label="Alignment cost = {:.4f}".format(cost))
+                    plt.plot([], [], c='w', label="Normalized cost = {:.4f}".format(cost/(len(r)*2)))
+
+                    plt.axis("off")
+                    plt.legend(bbox_to_anchor=(1,1))
+                    plt.savefig(fileloc+"dtw/vis_"+mats_dir[j]+g+".png", dpi=300, bbox_inches="tight")
+                    plt.close('all')
         
         for j in range(3):
             dtw_cost[j].append(dtw_cost_smp[j])
@@ -146,7 +187,7 @@ def main(g, r, v_data, v_mock, num_samples=num_samples):
 
         for smp in range(num_samples):
         # for smp in tqdm(range(num_samples), desc="Correlation by radii"):
-            if smp % 10:
+            if smp % 5:
                 continue
 
             # Interpolate the residuals with cubic Hermite spline splines.
@@ -339,7 +380,7 @@ def main(g, r, v_data, v_mock, num_samples=num_samples):
                 fig1.savefig(fileloc+subdir+"pearson/"+deriv_dir[der]+g+".png", dpi=300, bbox_inches="tight")
                 plt.close()
     
-    print("\nMemory usage: %s (kb)" %getrusage(RUSAGE_SELF).ru_maxrss)
+    # print("\nMemory usage: %s (kb)" %getrusage(RUSAGE_SELF).ru_maxrss)
     jax.clear_caches()    # One-line attempt to solve the JIT memory allocation problem.
 
 
@@ -486,10 +527,11 @@ if __name__ == "__main__":
     galaxy_count = len(galaxies)
 
     if testing:
-        if test_multiple:
-            galaxy_count = 2
-        else:
-            galaxy_count = 1
+        galaxy_count = 1
+        galaxies = ['DDO161']
+    elif test_multiple:
+        galaxy_count = 5
+        galaxies = galaxies[:galaxy_count]
     bulged_count = 0
     xbulge_count = 0
     
@@ -530,7 +572,7 @@ if __name__ == "__main__":
         else:
             xbulge_count += 1
 
-        print("Analyzing galaxy "+g+" ("+str(i+1)+"/60)")
+        print("\nAnalyzing galaxy "+g+" ("+str(i+1)+"/60)")
         main(g, r.to_numpy(), v_data, v_mock)
 
     print("Max memory usage: %s (kb)" %getrusage(RUSAGE_SELF).ru_maxrss)
@@ -558,32 +600,32 @@ if __name__ == "__main__":
             sort_args = np.argsort(norm_percentiles[2][0])
             norm_percentiles = norm_percentiles[:, :, sort_args]
 
+            print(f"Galaxies in ascending order of cost(data): {np.array(galaxies)[sort_args]}")
+
             # Plot histogram of normalized DTW alignment costs of all galaxies.
             plt.title("Normalized DTW alignment cost (relative to MOND)")
             hist_labels = [ "Data", "MOND", r"$\Lambda$CDM" ]
             colours = [ 'k', 'mediumblue', 'tab:green' ]
 
-            mean_norm = np.nanmean(norm_percentiles[2][0])
-            plt.bar(galaxies, norm_percentiles[2][0], color=colours[0], alpha=0.3, label=hist_labels[0])
-            plt.axhline(y=mean_norm, color=colours[0], linestyle='dashed', label="Mean = {:.4f}".format(mean_norm))
+            # plt.bar(galaxies, norm_percentiles[2][0], color=colours[0], alpha=0.3, label=hist_labels[0])
 
-            # for j in range(1, 3):
-            jj = 2  # Only plot values for LCDM since cost(MOND) == 0.
-            mean_norm = np.nanmean(norm_percentiles[2][jj])
-            low_err = norm_percentiles[2][jj] - norm_percentiles[1][jj]
-            up_err = norm_percentiles[3][jj] - norm_percentiles[2][jj]
+            for j in range(3):
+                if j == 1: continue     # Only plot values for LCDM since cost(MOND) == 0.
+                mean_norm = np.nanmean(norm_percentiles[2][j])
+                low_err = norm_percentiles[2][j] - norm_percentiles[1][j]
+                up_err = norm_percentiles[3][j] - norm_percentiles[2][j]
 
-            low_norm1 = np.full(galaxy_count, np.nanmean(norm_percentiles[1][jj]))
-            # low_norm2 = np.full(galaxy_count, np.nanmean(norm_percentiles[0][jj]))
-            up_norm1 = np.full(galaxy_count, np.nanmean(norm_percentiles[3][jj]))
-            # up_norm2 = np.full(galaxy_count, np.nanmean(norm_percentiles[4][jj]))
+                low_norm1 = np.full(galaxy_count, np.nanmean(norm_percentiles[1][j]))
+                # low_norm2 = np.full(galaxy_count, np.nanmean(norm_percentiles[0][j]))
+                up_norm1 = np.full(galaxy_count, np.nanmean(norm_percentiles[3][j]))
+                # up_norm2 = np.full(galaxy_count, np.nanmean(norm_percentiles[4][j]))
 
-            plt.errorbar(galaxies, norm_percentiles[2][jj], [low_err, up_err], fmt='.', ls='none',
-                            capsize=2, color=colours[jj], alpha=0.5, label=hist_labels[jj])
-            plt.axhline(y=mean_norm, color=colours[jj], linestyle='dashed', label="Mean = {:.4f}".format(mean_norm))
-            plt.fill_between(galaxies, low_norm1, up_norm1, color=colours[jj], alpha=0.25)
-            # plt.fill_between(galaxies, low_norm2, up_norm2, color=colours[jj], alpha=0.1)
-            
+                plt.axhline(y=mean_norm, color=colours[j], linestyle='dashed', label="Mean = {:.4f}".format(mean_norm))
+                plt.fill_between(galaxies, low_norm1, up_norm1, color=colours[j], alpha=0.25)
+                # plt.fill_between(galaxies, low_norm2, up_norm2, color=colours[j], alpha=0.1)
+                plt.errorbar(galaxies, norm_percentiles[2][j], [low_err, up_err], fmt='.', ls='none',
+                                capsize=2, color=colours[j], alpha=0.5, label=hist_labels[j])
+                            
             plt.legend()
             plt.xticks([])
             plt.savefig(fileloc+"dtw/histo1.png", dpi=300, bbox_inches="tight")
@@ -622,6 +664,8 @@ if __name__ == "__main__":
             # Sort by descending order in difference between (LCDM - data).
             sort_args = np.argsort(diff_perc[2][1])[::-1]
             diff_percentiles = diff_perc[:, :, sort_args]
+
+            print(f"Galaxies in descending order of cost(LCDM) - cost(data): {np.array(galaxies)[sort_args]}")
 
             # Plot histogram of normalized DTW alignment costs of all galaxies.
             plt.title("Normalised cost differences (mock - real data)")
@@ -674,7 +718,7 @@ if __name__ == "__main__":
                 low_norm1 = np.full(galaxy_count, np.nanmean(mock_sorted[:,j,2]))
                 up_norm1 = np.full(galaxy_count, np.nanmean(mock_sorted[:,j,0]))
 
-                plt.errorbar(galaxies, mock_sorted[0,j,1], [low_err, up_err], fmt='.', ls='none', capsize=2, color=colours[j+1], alpha=0.5, label=hist_labels[j+1])
+                plt.errorbar(galaxies, mock_sorted[:,j,1], [low_err, up_err], fmt='.', ls='none', capsize=2, color=colours[j+1], alpha=0.5, label=hist_labels[j+1])
                 plt.axhline(y=med_corr, color=colours[j+1], linestyle='dashed', label="Mean = {:.4f}".format(med_corr))
                 plt.fill_between(galaxies, low_norm1, up_norm1, color=colours[j], alpha=0.25)
             
