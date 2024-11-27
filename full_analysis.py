@@ -23,9 +23,11 @@ testing = False
 test_multiple = False   # Loops over the first handful of galaxies instead of just the fist one (DDO161).
 make_plots = True
 use_DTW = True
-do_correlations = True
+do_correlations = False
 
 fileloc = "/mnt/users/koe/plots/SPARC_analysis/"
+# Options: cost wrt MOND: "dtw/"; cost wrt LCDM: "dtw/cost_vsLCDM", original cose (MSE): "dtw/cost_meansq/".
+if use_DTW: fname_DTW = fileloc + "dtw/cost_vsLCDM/"
 num_samples = 500   # No. of iterations sampling for uncertainties + errors.
 
 
@@ -96,9 +98,20 @@ def main(g, r, v_data, v_mock, num_samples=num_samples):
             for n in range(len(r)):
                 for m in range(len(r)):
                     # Construct distance matrix such that cost = 0 if Vobs = MOND(Vbar).
-                    dist_data[n, m] = np.abs(res_Vobs[n] - res_MOND[m][smp])
-                    dist_MOND[n, m] = np.abs(res_MOND[n][smp] - res_MOND[m][smp])
-                    dist_LCDM[n, m] = np.abs(res_LCDM[n][smp] - res_MOND[m][smp])
+                    if fname_DTW ==fileloc+"dtw/":
+                        dist_data[n, m] = np.abs(res_Vobs[n] - res_MOND[m][smp])
+                        dist_MOND[n, m] = np.abs(res_MOND[n][smp] - res_MOND[m][smp])
+                        dist_LCDM[n, m] = np.abs(res_LCDM[n][smp] - res_MOND[m][smp])
+
+                    # Alternative constructions:
+                    elif fname_DTW == fileloc+"dtw/cost_vsLCDM":
+                        dist_data[n, m] = np.abs(res_Vobs[n] - res_LCDM[m][smp])
+                        dist_MOND[n, m] = np.abs(res_MOND[n][smp] - res_LCDM[m][smp])
+                        dist_LCDM[n, m] = np.abs(res_LCDM[n][smp] - res_LCDM[m][smp])
+                    else:
+                        dist_data[n, m] = np.abs(res_Vobs[n] - res_Vbar_mock[m][smp])
+                        dist_MOND[n, m] = np.abs(res_MOND[n][smp] - res_Vbar_mock[m][smp])
+                        dist_LCDM[n, m] = np.abs(res_LCDM[n][smp] - res_Vbar_mock[m][smp])
             
             dist_mats = np.array([ dist_data, dist_MOND, dist_LCDM ])
             mats_dir = [ "data/", "MOND/", "LCDM/" ]
@@ -125,31 +138,39 @@ def main(g, r, v_data, v_mock, num_samples=num_samples):
                     plt.imshow(cost_mat, cmap=plt.cm.binary, interpolation="nearest", origin="lower")
                     plt.plot(x_path, y_path)
 
-                    plt.savefig(fileloc+"dtw/matrix_"+mats_dir[j]+g+".png", dpi=300, bbox_inches="tight")
+                    plt.savefig(fname_DTW+"matrix_"+mats_dir[j]+g+".png", dpi=300, bbox_inches="tight")
                     plt.close('all')
 
                     # Visualize DTW alignment.
                     plt.title("DTW alignment: "+g)
 
+                    # Settings for visualizing different DTW constructions.
+                    if fname_DTW == fileloc+"dtw/":
+                        ref_curve = [ res_MOND, "mediumblue", "MOND" ]
+                    elif fname_DTW == fileloc+"dtw/cost_vsLCDM":
+                        ref_curve = [ res_LCDM, "tab:green", r"$\Lambda$CDM" ]
+                    else:
+                        ref_curve = [ res_Vbar_mock, "tab:red", "Vbar" ]
+
                     if j == 0:
-                        diff = abs(max(np.array(res_MOND)[:,smp]) - min(res_Vobs))
+                        diff = abs(max(np.array(ref_curve[0])[:,smp]) - min(res_Vobs))
                         for x_i, y_j in path:
-                            plt.plot([x_i, y_j], [res_Vobs[x_i] + diff, res_MOND[y_j][smp] - diff], c="C7", alpha=0.4)
+                            plt.plot([x_i, y_j], [res_Vobs[x_i] + diff, ref_curve[0][y_j][smp] - diff], c="C7", alpha=0.4)
                         plt.plot(np.arange(len(r)), np.array(res_Vobs) + diff, c='k', label=v_comps[3])
 
                     else: 
-                        abs(max(np.array(res_MOND)[:,smp]) - min(np.array(res_mock)[j,:,smp]))
+                        abs(max(np.array(ref_curve[0])[:,smp]) - min(np.array(res_mock)[j,:,smp]))
                         for x_i, y_j in path:
-                            plt.plot([x_i, y_j], [res_mock[j][x_i][smp] + diff, res_MOND[y_j][smp] - diff], c="C7", alpha=0.4)
+                            plt.plot([x_i, y_j], [res_mock[j][x_i][smp] + diff, ref_curve[0][y_j][smp] - diff], c="C7", alpha=0.4)
                         plt.plot(np.arange(len(r)), np.array(res_mock)[j,:,smp] + diff, c=colours[j], label=v_comps[j])
 
-                    plt.plot(np.arange(len(r)), np.array(res_MOND)[:,smp] - diff, c="mediumblue", label="MOND")
+                    plt.plot(np.arange(len(r)), np.array(ref_curve[0])[:,smp] - diff, c=ref_curve[1], label=ref_curve[2])
                     plt.plot([], [], c='w', label="Alignment cost = {:.4f}".format(cost))
                     plt.plot([], [], c='w', label="Normalized cost = {:.4f}".format(cost/(len(r)*2)))
 
                     plt.axis("off")
                     plt.legend(bbox_to_anchor=(1,1))
-                    plt.savefig(fileloc+"dtw/vis_"+mats_dir[j]+g+".png", dpi=300, bbox_inches="tight")
+                    plt.savefig(fname_DTW+"vis_"+mats_dir[j]+g+".png", dpi=300, bbox_inches="tight")
                     plt.close('all')
         
         for j in range(3):
@@ -305,7 +326,7 @@ def main(g, r, v_data, v_mock, num_samples=num_samples):
                 ax5.plot(rad[10:], bar_ratio[10:], '--', color=color_bar, label="Vbar/Vobs")
                 ax5.tick_params(axis='y', labelcolor=color_bar)
                 
-                ax2.legend(bbox_to_anchor=(1.64, 1.3))
+                # ax2.legend(bbox_to_anchor=(1.64, 1.3))
                 ax2.grid()
 
                 plt.subplots_adjust(hspace=0.05)
@@ -373,7 +394,7 @@ def main(g, r, v_data, v_mock, num_samples=num_samples):
                 ax5.plot(rad[10:], bar_ratio[10:], '--', color=color_bar, label="Vbar/Vobs")
                 ax5.tick_params(axis='y', labelcolor=color_bar)
                 
-                ax2.legend(bbox_to_anchor=(1.64, 1.3))
+                # ax2.legend(bbox_to_anchor=(1.64, 1.3))
                 ax2.grid()
 
                 plt.subplots_adjust(hspace=0.05)
@@ -607,10 +628,14 @@ if __name__ == "__main__":
             hist_labels = [ "Data", "MOND", r"$\Lambda$CDM" ]
             colours = [ 'k', 'mediumblue', 'tab:green' ]
 
-            # plt.bar(galaxies, norm_percentiles[2][0], color=colours[0], alpha=0.3, label=hist_labels[0])
+            if fname_DTW == fileloc+"dtw/cost_meansq/":
+                plt.bar(galaxies, norm_percentiles[2][0], color=colours[0], alpha=0.3, label=hist_labels[0])
 
             for j in range(3):
-                if j == 1: continue     # Only plot values for LCDM since cost(MOND) == 0.
+                if fname_DTW == fileloc+"dtw/":
+                    if j == 1: continue     # Only plot values for data and LCDM since cost(MOND) == 0.
+                elif fname_DTW == fileloc+"dtw/cost_vsLCDM/":
+                    if j == 2: continue     # Only plot values for data and MOND since cost(LCDM) == 0.
                 mean_norm = np.nanmean(norm_percentiles[2][j])
                 low_err = norm_percentiles[2][j] - norm_percentiles[1][j]
                 up_err = norm_percentiles[3][j] - norm_percentiles[2][j]
@@ -623,13 +648,13 @@ if __name__ == "__main__":
                 plt.axhline(y=mean_norm, color=colours[j], linestyle='dashed', label="Mean = {:.4f}".format(mean_norm))
                 plt.fill_between(galaxies, low_norm1, up_norm1, color=colours[j], alpha=0.25)
                 # plt.fill_between(galaxies, low_norm2, up_norm2, color=colours[j], alpha=0.1)
-                plt.errorbar(galaxies, norm_percentiles[2][j], [low_err, up_err], fmt='.', ls='none',
+                if not(fname_DTW == fileloc+"dtw/cost_meansq/" and j == 0):
+                    plt.errorbar(galaxies, norm_percentiles[2][j], [low_err, up_err], fmt='.', ls='none',
                                 capsize=2, color=colours[j], alpha=0.5, label=hist_labels[j])
                             
             plt.legend()
             plt.xticks([])
-            plt.savefig(fileloc+"dtw/histo1.png", dpi=300, bbox_inches="tight")
-            # plt.savefig(fileloc+"dtw/corr_scat/histo1.png", dpi=300, bbox_inches="tight")
+            plt.savefig(fname_DTW+"histo1.png", dpi=300, bbox_inches="tight")
             plt.close()
 
 
@@ -647,8 +672,7 @@ if __name__ == "__main__":
                 plt.errorbar(norm_percentiles[2][0], norm_percentiles[2][j], [low_err, up_err], fmt='.', ls='none', capsize=2, color=colours[j], alpha=0.5, label=hist_labels[j])
             
                 plt.legend()
-                plt.savefig(fileloc+"dtw/scatter_"+plotloc[j-1]+".png", dpi=300, bbox_inches="tight")
-                # plt.savefig(fileloc+"dtw/corr_scat/scatter_"+plotloc[j-1]+".png", dpi=300, bbox_inches="tight")
+                plt.savefig(fname_DTW+"scatter_"+plotloc[j-1]+".png", dpi=300, bbox_inches="tight")
                 plt.close()
 
 
@@ -689,8 +713,7 @@ if __name__ == "__main__":
             
             plt.legend()
             plt.xticks([])
-            plt.savefig(fileloc+"dtw/histo2.png", dpi=300, bbox_inches="tight")
-            # plt.savefig(fileloc+"dtw/corr_scat/histo2.png", dpi=300, bbox_inches="tight")
+            plt.savefig(fname_DTW+"histo2.png", dpi=300, bbox_inches="tight")
             plt.close()
 
         """
@@ -724,7 +747,7 @@ if __name__ == "__main__":
             
             plt.legend()
             plt.xticks([])
-            plt.savefig(fileloc+"corr_radii/histo1.png", dpi=300, bbox_inches="tight")
+            plt.savefig(fileloc+"correlations/radii/histo1.png", dpi=300, bbox_inches="tight")
             plt.close()
 
             """Pearson histogram"""
@@ -754,7 +777,7 @@ if __name__ == "__main__":
             
             plt.legend()
             plt.xticks([])
-            plt.savefig(fileloc+"corr_radii/pearson/histo1.png", dpi=300, bbox_inches="tight")
+            plt.savefig(fileloc+"correlations/radii/pearson/histo1.png", dpi=300, bbox_inches="tight")
             plt.close()
 
     print("Max memory usage: %s (kb)" %getrusage(RUSAGE_SELF).ru_maxrss)
