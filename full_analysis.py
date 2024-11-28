@@ -26,8 +26,9 @@ use_DTW = True
 do_correlations = False
 
 fileloc = "/mnt/users/koe/plots/SPARC_analysis/"
-# Options: cost wrt MOND: "dtw/"; cost wrt LCDM: "dtw/cost_vsLCDM", original cose (MSE): "dtw/cost_meansq/".
-if use_DTW: fname_DTW = fileloc + "dtw/cost_vsLCDM/"
+# Options: cost wrt MOND: "dtw/"; cost wrt LCDM: "dtw/cost_vsLCDM/", original cose (MSE): "dtw/cost_meansq/".
+if use_DTW: fname_DTW = fileloc + "dtw/cost_meansq/"
+print(f"fname_DTW = {fname_DTW}")
 num_samples = 500   # No. of iterations sampling for uncertainties + errors.
 
 
@@ -104,7 +105,7 @@ def main(g, r, v_data, v_mock, num_samples=num_samples):
                         dist_LCDM[n, m] = np.abs(res_LCDM[n][smp] - res_MOND[m][smp])
 
                     # Alternative constructions:
-                    elif fname_DTW == fileloc+"dtw/cost_vsLCDM":
+                    elif fname_DTW == fileloc+"dtw/cost_vsLCDM/":
                         dist_data[n, m] = np.abs(res_Vobs[n] - res_LCDM[m][smp])
                         dist_MOND[n, m] = np.abs(res_MOND[n][smp] - res_LCDM[m][smp])
                         dist_LCDM[n, m] = np.abs(res_LCDM[n][smp] - res_LCDM[m][smp])
@@ -147,7 +148,7 @@ def main(g, r, v_data, v_mock, num_samples=num_samples):
                     # Settings for visualizing different DTW constructions.
                     if fname_DTW == fileloc+"dtw/":
                         ref_curve = [ res_MOND, "mediumblue", "MOND" ]
-                    elif fname_DTW == fileloc+"dtw/cost_vsLCDM":
+                    elif fname_DTW == fileloc+"dtw/cost_vsLCDM/":
                         ref_curve = [ res_LCDM, "tab:green", r"$\Lambda$CDM" ]
                     else:
                         ref_curve = [ res_Vbar_mock, "tab:red", "Vbar" ]
@@ -159,7 +160,7 @@ def main(g, r, v_data, v_mock, num_samples=num_samples):
                         plt.plot(np.arange(len(r)), np.array(res_Vobs) + diff, c='k', label=v_comps[3])
 
                     else: 
-                        abs(max(np.array(ref_curve[0])[:,smp]) - min(np.array(res_mock)[j,:,smp]))
+                        diff = abs(max(np.array(ref_curve[0])[:,smp]) - min(np.array(res_mock)[j,:,smp]))
                         for x_i, y_j in path:
                             plt.plot([x_i, y_j], [res_mock[j][x_i][smp] + diff, ref_curve[0][y_j][smp] - diff], c="C7", alpha=0.4)
                         plt.plot(np.arange(len(r)), np.array(res_mock)[j,:,smp] + diff, c=colours[j], label=v_comps[j])
