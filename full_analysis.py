@@ -23,12 +23,14 @@ testing = False
 test_multiple = False   # Loops over the first handful of galaxies instead of just the fist one (DDO161).
 make_plots = True
 use_DTW = True
-do_correlations = False
+use_MSE = False
+do_correlations = True
 
 fileloc = "/mnt/users/koe/plots/SPARC_analysis/"
-# Options: cost wrt MOND: "dtw/"; cost wrt LCDM: "dtw/cost_vsLCDM/", original cose (MSE): "dtw/cost_meansq/".
-if use_DTW: fname_DTW = fileloc + "dtw/cost_meansq/"
-print(f"fname_DTW = {fname_DTW}")
+# Options: cost wrt MOND: "dtw/"; cost wrt LCDM: "dtw/cost_vsLCDM/", original cost: "dtw/cost_vsVbar/".
+if use_DTW:
+    fname_DTW = fileloc + "dtw/cost_vsVbar/"
+    print(f"fname_DTW = {fname_DTW}")
 num_samples = 500   # No. of iterations sampling for uncertainties + errors.
 
 
@@ -80,6 +82,25 @@ def main(g, r, v_data, v_mock, num_samples=num_samples):
         print(f"Feature found in Vbar of {g}")
         print(f"Properties: lb={lb}, rb={rb}, widths={widths}")
 
+
+    """
+    Simple mean-squared error (MSE) relative to GP fits.
+    """
+    def meansq_err( r, y_true, y_pred ):
+        if len(y_true) != len(y_pred):
+            raise RuntimeError(f"Length of y_true ({len(y_true)}) does not equal length of y_pred ({len(y_pred)})!")
+        return np.sum( (y_pred - y_true)**2 / len(r) )
+
+    if use_MSE:
+        res_ref = np.zeros(len(r))
+        mse_data = meansq_err( r, res_Vobs, res_ref )
+        mse_MOND, mse_LCDM = [], []
+        for smp in range(num_samples):
+            mse_MOND.append( meansq_err(r, np.array(res_MOND)[:,smp], res_ref) )
+            mse_LCDM.append( meansq_err(r, np.array(res_LCDM)[:,smp], res_ref) )
+        mse_perc[0].append( mse_data )
+        mse_perc[1].append( np.percentile(mse_MOND, [16.0, 50.0, 84.0]) )
+        mse_perc[2].append( np.percentile(mse_LCDM, [16.0, 50.0, 84.0]) )
 
 
     """
@@ -550,7 +571,7 @@ if __name__ == "__main__":
 
     if testing:
         galaxy_count = 1
-        galaxies = ['DDO161']
+        galaxies = ['NGC6946']
     elif test_multiple:
         galaxy_count = 5
         galaxies = galaxies[:galaxy_count]
@@ -560,6 +581,7 @@ if __name__ == "__main__":
     spearman_data, pearson_data, spearman_mock, pearson_mock = [], [], [], []
     dtw_cost = [ [], [], [] ]
     norm_cost = [ [], [], [] ]
+    mse_perc = [ [], [], [] ]
 
     for i in range(galaxy_count):
     # for i in tqdm(range(galaxy_count)):
@@ -605,7 +627,35 @@ if __name__ == "__main__":
     SUMMARY PLOTS.
     --------------
     """
-    if make_plots:
+    if make_plots and not testing:
+        """
+        Plot histogram of MSE (in ascending order of data).
+        """
+        if use_MSE:
+            mse_argsort = np.argsort( mse_perc[0] )
+            print(f"Galaxies in ascending order of mse(data): {np.array(galaxies)[mse_argsort]}")
+
+            plt.title("Mean-squared errors relative to GP fits")
+            plt.ylabel("Mean-squared errors")
+            plt.xlabel("Galaxies")
+
+            mse_MOND_perc, mse_LCDM_perc = np.array(mse_perc[1])[mse_argsort], np.array(mse_perc[2])[mse_argsort]
+            mse_MOND_errors = [ mse_MOND_perc[:,2] - mse_MOND_perc[:,1], mse_MOND_perc[:,1] - mse_MOND_perc[:,0] ]
+            mse_LCDM_errors = [ mse_LCDM_perc[:,2] - mse_LCDM_perc[:,1], mse_LCDM_perc[:,1] - mse_LCDM_perc[:,0] ]
+
+            plt.bar(galaxies[mse_argsort], np.array(mse_perc[0])[mse_argsort], color='k', alpha=0.3, label="Data")
+            plt.errorbar(galaxies[mse_argsort], mse_MOND_perc[:,1], mse_MOND_errors, fmt='.', ls='none',
+                         capsize=2, color='mediumblue', alpha=0.5, label="MOND")
+            plt.errorbar(galaxies[mse_argsort], mse_LCDM_perc[:,1], mse_LCDM_errors, fmt='.', ls='none',
+                         capsize=2, color='tab:green', alpha=0.5, label=r"$\Lambda$CDM")
+
+            plt.legend()
+            plt.xticks([])
+            # plt.yscale('log')
+            plt.savefig(fileloc+"MSE.png", dpi=300, bbox_inches="tight")
+            plt.close()
+
+
         """
         Plot histogram of normalized DTW costs (in ascending order of costs for data).
         """
@@ -625,7 +675,10 @@ if __name__ == "__main__":
             print(f"Galaxies in ascending order of cost(data): {np.array(galaxies)[sort_args]}")
 
             # Plot histogram of normalized DTW alignment costs of all galaxies.
-            plt.title("Normalized DTW alignment cost (relative to MOND)")
+            if fname_DTW == fileloc+"dtw/cost_vsLCDM/": plt.title(r"Normalized DTW alignment costs (relative to $\Lambda$CDM)")
+            elif fname_DTW == fileloc+"dtw/cost_meansq/": plt.title("Normalized DTW alignment costs (relative to Vbar)")
+            else: plt.title("Normalized DTW alignment costs (relative to MOND)")
+
             hist_labels = [ "Data", "MOND", r"$\Lambda$CDM" ]
             colours = [ 'k', 'mediumblue', 'tab:green' ]
 
@@ -641,14 +694,15 @@ if __name__ == "__main__":
                 low_err = norm_percentiles[2][j] - norm_percentiles[1][j]
                 up_err = norm_percentiles[3][j] - norm_percentiles[2][j]
 
-                low_norm1 = np.full(galaxy_count, np.nanmean(norm_percentiles[1][j]))
-                # low_norm2 = np.full(galaxy_count, np.nanmean(norm_percentiles[0][j]))
-                up_norm1 = np.full(galaxy_count, np.nanmean(norm_percentiles[3][j]))
-                # up_norm2 = np.full(galaxy_count, np.nanmean(norm_percentiles[4][j]))
+                if j != 0:
+                    low_norm1 = np.full(galaxy_count, np.nanmean(norm_percentiles[1][j]))
+                    # low_norm2 = np.full(galaxy_count, np.nanmean(norm_percentiles[0][j]))
+                    up_norm1 = np.full(galaxy_count, np.nanmean(norm_percentiles[3][j]))
+                    # up_norm2 = np.full(galaxy_count, np.nanmean(norm_percentiles[4][j]))
+                    plt.fill_between(galaxies, low_norm1, up_norm1, color=colours[j], alpha=0.25)
+                    # plt.fill_between(galaxies, low_norm2, up_norm2, color=colours[j], alpha=0.1)
 
                 plt.axhline(y=mean_norm, color=colours[j], linestyle='dashed', label="Mean = {:.4f}".format(mean_norm))
-                plt.fill_between(galaxies, low_norm1, up_norm1, color=colours[j], alpha=0.25)
-                # plt.fill_between(galaxies, low_norm2, up_norm2, color=colours[j], alpha=0.1)
                 if not(fname_DTW == fileloc+"dtw/cost_meansq/" and j == 0):
                     plt.errorbar(galaxies, norm_percentiles[2][j], [low_err, up_err], fmt='.', ls='none',
                                 capsize=2, color=colours[j], alpha=0.5, label=hist_labels[j])
@@ -744,7 +798,7 @@ if __name__ == "__main__":
 
                 plt.errorbar(galaxies, mock_sorted[:,j,1], [low_err, up_err], fmt='.', ls='none', capsize=2, color=colours[j+1], alpha=0.5, label=hist_labels[j+1])
                 plt.axhline(y=med_corr, color=colours[j+1], linestyle='dashed', label="Mean = {:.4f}".format(med_corr))
-                plt.fill_between(galaxies, low_norm1, up_norm1, color=colours[j], alpha=0.25)
+                plt.fill_between(galaxies, low_norm1, up_norm1, color=colours[j+1], alpha=0.25)
             
             plt.legend()
             plt.xticks([])
@@ -774,7 +828,7 @@ if __name__ == "__main__":
 
                 plt.errorbar(galaxies, mock_sorted[:,j,1], [low_err, up_err], fmt='.', ls='none', capsize=2, color=colours[j+1], alpha=0.5, label=hist_labels[j+1])
                 plt.axhline(y=med_corr, color=colours[j+1], linestyle='dashed', label="Mean = {:.4f}".format(med_corr))
-                plt.fill_between(galaxies, low_norm1, up_norm1, color=colours[j], alpha=0.25)
+                plt.fill_between(galaxies, low_norm1, up_norm1, color=colours[j+1], alpha=0.25)
             
             plt.legend()
             plt.xticks([])
