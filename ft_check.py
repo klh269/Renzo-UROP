@@ -1,7 +1,6 @@
 # (C) 2024 Enoch Ko.
 """
-Check and extract features (both peaks and troughs)
-from RC residuals using scipy.signal.find_peaks.
+Check and extract features in RC residuals.
 """
 import math
 import numpy as np
@@ -20,16 +19,7 @@ from utils_analysis.toy_GP import GP_fit, GP_residuals
 from utils_analysis.extract_ft import ft_check
 
 
-
-# Switches for extracting features from different RCs.
-testing    = False
-use_toy    = False
-use_1560   = False
-use_SPARC  = False
-use_THINGS = True
-
-
-if not (use_toy or use_1560 or use_SPARC or use_THINGS):
+def sine_test():
     rad = np.linspace(0.0, 4.0*np.pi, 50)
     vel = np.sin(rad)
     v_werr = np.random.normal(vel, 0.1)
@@ -51,7 +41,7 @@ if not (use_toy or use_1560 or use_SPARC or use_THINGS):
     plt.close()
     
 
-if use_toy:
+def toy_ft(testing:bool=False):
     # Parameters for Gaussian bump (fixed feature) and noise (varying amplitudes).
     bump_size  = 20.0   # Defined in terms of percentage of max(Vbar)
     bump_loc   = 5.0
@@ -86,7 +76,7 @@ if use_toy:
         plt.close()
 
 
-if use_1560:
+def NGC1560_ft():
     # Get galaxy data from digitized plot.
     file = "/mnt/users/koe/data/NGC1560_Stacy.dat"
     columns = [ "Rad", "Vobs", "Vgas", "Vdisk", "errV" ]
@@ -157,7 +147,7 @@ if use_1560:
     plt.close()
 
 
-if use_SPARC:
+def SPARC_ft(testing:bool=False):
     # Get galaxy data from table1.
     file = "/mnt/users/koe/SPARC_Lelli2016c.mrt.txt"
 
@@ -193,8 +183,6 @@ if use_SPARC:
         gp_fits = np.load("/mnt/users/koe/gp_fits/"+g+".npy")
         rad = gp_fits[0]
         mean_prediction = [ gp_fits[1], gp_fits[3], gp_fits[4], gp_fits[2] ]    # Mean predictions from GP for [ Vbar, MOND, LCDM, Vobs ]
-        # lower_percentile = [ gp_fits[5], gp_fits[7], gp_fits[8], gp_fits[6] ]   # 16t percentiles from GP
-        # upper_percentile = [ gp_fits[9], gp_fits[11], gp_fits[12], gp_fits[10] ]    # 84th percentiles from GP
 
         # Compute residuals of fits.
         # res_Vbar_data, res_Vobs = [], []
@@ -222,75 +210,58 @@ if use_SPARC:
                 if noise == noise_arr[-1]: print(g)
                 SPARC_noise_threshold.append(noise)
                 break
-            
-        #     lb, rb, widths = ft_check( np.array(residuals), np.array(data["errV"]) )
-        #     # print(f"Residual: {res}, Peaks Found: {peaks}, Number of Peaks: {len(peaks)}")  # Debugging line
-    
-        #     if len(lb) == 0:
-        #         have_peaks = False
-
-        #     if testing and res == 1:
-        #         print(lb, rb, widths)
-
-        #         plt.title("Residuals ft_check test")
-        #         plt.errorbar(r, residuals, data["errV"], alpha=0.5, color='k')
-
-        #         for ft in range(len(lb)):
-        #             plt.plot(r[lb[ft]:rb[ft]], residuals[lb[ft]:rb[ft]], color='red', alpha=0.5)
-        #             plt.hlines(y=0., xmin=r[lb[ft]], xmax=r[rb[ft]], color = "C1")
-                
-        #         plt.savefig("/mnt/users/koe/test.png")
-        #         plt.close()
-
-        #     if len(lb) > 0:
-        #         if res == 0: pgals_Vbar.append(g)
-        #         if res == 1: pgals_Vobs.append(g)
-
-        # if have_peaks:
-        #     pgals.append(g)
-
-    # print(f"\nNumber of galaxies with features in Vobs: {len(pgals_Vobs)}")
-    # print(pgals_Vobs)
-    # print(f"\nNumber of galaxies with features in Vbar: {len(pgals_Vbar)}")
-    # print(pgals_Vbar)
-    # print(f"\nNumber of galaxies with features in both Vobs and Vbar: {len(pgals)}")
-    # print(pgals)
 
 
-if use_THINGS:
-    pgals = []
-    galaxies, rad, errV, residuals = get_things_res()
+def THINGS_ft():
+    _, _, errV, residuals = get_things_res()
 
     noise_arr = np.linspace(0.0, 1.9, 20)
-    THINGS_noise_threshold = []
+    THINGS_noise_thresholds = []
 
     for i in tqdm(range(18), desc="THINGS galaxies"):
         for noise in np.flip(noise_arr):
             _, _, widths = ft_check( np.array(residuals[i]), np.array(errV[i]), noise )
             if len(widths) > 0:
-                THINGS_noise_threshold.append(noise)
+                THINGS_noise_thresholds.append(noise)
                 # print(f"ft found in {galaxies[i].upper()} with height {noise}*noise")
                 break
 
-    # for i in tqdm(range(18)):
-    #     lb, rb, widths = ft_check( np.array(residuals[i]), np.array(errV[i]) )
-    #     if len(widths) > 0:
-    #         pgals.append(galaxies[i].upper())
-    #         print(f"Feature(s) found in galaxy {galaxies[i].upper()}:")
-    #         print(f"Feature properties: {lb, rb, widths}")
-    
-    # print(f"Number of Little Things galaxies with features: {len(pgals)}")
-    # print(pgals)
+    return THINGS_noise_thresholds
 
 
-# print(f"SPARC noise threshold (Vobs): {SPARC_noise_threshold}")
-print(f"THINGS noise threshold: {THINGS_noise_threshold}")
+def THINGS_error_model(num_samples:int):
+    # Sample from errV and apply the same ft idenfitication procedure;
+    # we suspect that the lack of features is due to an overestimation of errors in THINGS.
+    _, _, errV, _ = get_things_res()
 
-# plt.hist(SPARC_noise_threshold[1], bins=50, alpha=0.5, label="SPARC")
-plt.hist(THINGS_noise_threshold, bins=20, alpha=0.5, label="THINGS")
-plt.xlabel("Noise threshold")
-plt.ylabel("Number of galaxies")
+    noise_arr = np.linspace(0.0, 1.9, 20)
+    THINGS_err_thresholds = []
 
-# plt.yscale("log")
-plt.legend()
-plt.savefig("/mnt/users/koe/plots/ft_check.png")
+    for i in tqdm(range(18), desc="THINGS error model"):
+        errV_copies = np.tile(errV[i], (num_samples, 1))    # dim = (num_samples, len(errV))
+        errV_zeros = np.zeros_like(errV_copies)
+        residuals = np.random.normal(errV_zeros, errV_copies)
+
+        for smp in range(num_samples):
+            for noise in np.flip(noise_arr):
+                _, _, widths = ft_check( np.array(residuals[smp]), np.array(errV[i]), noise )
+                if len(widths) > 0:
+                    THINGS_err_thresholds.append(noise)
+                    break
+
+    return THINGS_err_thresholds
+
+
+if __name__ == "__main__":
+    num_samples = 10000
+    THINGS_err_thresholds = THINGS_error_model(num_samples)
+    THINGS_noise_thresholds = THINGS_ft()
+
+    plt.hist(THINGS_err_thresholds, bins=np.arange(0.0, 2.0, 0.1), weights=np.ones(np.shape(THINGS_err_thresholds))/num_samples, alpha=0.4, color="k", label="Expected distribution from MC sampling")
+    plt.hist(THINGS_noise_thresholds, bins=np.arange(0.0, 2.0, 0.1), alpha=0.5, color="tab:blue", label="Features extracted from data")
+    # plt.hist(SPARC_noise_threshold[1], bins=50, alpha=0.5, label="SPARC")
+
+    plt.xlabel("Noise threshold")
+    plt.ylabel("Number of galaxies")
+    plt.legend()
+    plt.savefig("/mnt/users/koe/plots/ft_check.png", dpi=300, bbox_inches="tight")
