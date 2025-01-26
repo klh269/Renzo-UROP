@@ -31,7 +31,7 @@ from utils_analysis.Vobs_fits import MOND_vsq, NFW_fit, BIC_from_samples
 matplotlib.use("Agg")  # noqa: E402
 
 
-testing = False
+testing = True
 make_plots = True
 do_DTW = True
 do_correlations = True
@@ -45,7 +45,7 @@ def main(args, g, X, Y, X_test):
     Do inference for Vbar with uniform prior for correlation length,
     then apply the resulted lengthscale to Vobs (both real and mock data).
     """
-    v_comps = [ "Vbar (SPARC)", "Vobs (SPARC)", "Vobs (MOND)", r"Vobs ($\Lambda$CDM)" ]
+    v_comps = [ r"$v_{bar}$", r"$v_{obs}$", r"$v_{MOND}$", r"$V_{\Lambda CDM}$" ]
     colours = [ 'tab:red', 'k', 'mediumblue', 'tab:green' ]
     corner_dir = [ "Vbar/", "Vobs_data/", "Vobs_MOND/", "Vobs_LCDM/" ]
     mean_prediction = []
@@ -54,7 +54,12 @@ def main(args, g, X, Y, X_test):
     # GP on Vbar with uniform prior on length.
     print("Fitting function to " + v_comps[0] + "...")
     rng_key, rng_key_predict = random.split(random.PRNGKey(0))
-    samples = run_inference(model, args, rng_key, X, Y[0])
+    if testing:
+        # Remove feature from Vobs before fitting GP.
+        X_Xft, Vobs_Xft = np.delete(X, np.s_[10:15], axis=0), np.delete(Y[0], np.s_[10:15], axis=0)
+        samples = run_inference(model, args, rng_key, X_Xft, Vobs_Xft)
+    else:
+        samples = run_inference(model, args, rng_key, X, Y[0])
 
     # do prediction
     vmap_args = (
@@ -63,11 +68,18 @@ def main(args, g, X, Y, X_test):
         samples["length"],
         samples["noise"],
     )
-    means, predictions = vmap(
-        lambda rng_key, var, length, noise: predict(
-            rng_key, X, Y[0], X_test, var, length, noise, use_cholesky=args.use_cholesky
-        )
-    )(*vmap_args)
+    if testing:
+        means, predictions = vmap(
+            lambda rng_key, var, length, noise: predict(
+                rng_key, X_Xft, Vobs_Xft, X_test, var, length, noise, use_cholesky=args.use_cholesky
+            )
+        )(*vmap_args)
+    else:
+        means, predictions = vmap(
+            lambda rng_key, var, length, noise: predict(
+                rng_key, X, Y[0], X_test, var, length, noise, use_cholesky=args.use_cholesky
+            )
+        )(*vmap_args)
 
     mean_pred = np.mean(means, axis=0)
     mean_prediction.append(mean_pred)
@@ -101,11 +113,19 @@ def main(args, g, X, Y, X_test):
         vmap_args = (
             random.split(rng_key_predict, samples["var"].shape[0]),
         )
-        means, predictions = vmap(
-            lambda rng_key: predict(
-                rng_key, X, Y[j], X_test, vr, ls, ns, use_cholesky=args.use_cholesky
-            )
-        )(*vmap_args)
+        if testing:
+            Vcomp_Xft = np.delete(Y[j], np.s_[10:15], axis=0)
+            means, predictions = vmap(
+                lambda rng_key: predict(
+                    rng_key, X_Xft, Vcomp_Xft, X_test, vr, ls, ns, use_cholesky=args.use_cholesky
+                )
+            )(*vmap_args)
+        else:
+            means, predictions = vmap(
+                lambda rng_key: predict(
+                    rng_key, X, Y[j], X_test, vr, ls, ns, use_cholesky=args.use_cholesky
+                )
+            )(*vmap_args)
 
         mean_pred = np.mean(means, axis=0)
         mean_prediction.append(mean_pred)
@@ -275,7 +295,7 @@ def main(args, g, X, Y, X_test):
 
                 ax1.grid()
 
-                ax2.set_xlabel(r'Normalised radius ($\times R_{eff}$)')
+                ax2.set_xlabel('Radii (kpc)')
                 ax2.set_ylabel("Correlations")
                 
                 vel_comps = [ "Data", "MOND", r"$\Lambda$CDM" ]
@@ -337,7 +357,7 @@ def main(args, g, X, Y, X_test):
 
                 correlations_w.append(win_corr)
 
-            # Compute average baryonic dominance (using Vobs from SPARC data) in moving window.
+            # Compute average baryonic dominance (using Vobs from data) in moving window.
             wbar_ratio = []
             for j in range(50, wmax):
                 wbar_ratio.append( sum( mean_prediction[0][j-50:j+50] / mean_prediction[1][j-50:j+50] ) / 101 )
@@ -375,7 +395,7 @@ def main(args, g, X, Y, X_test):
 
                     ax1.grid()
 
-                    ax2.set_xlabel(r'Normalised radius ($\times R_{eff}$)')
+                    ax2.set_xlabel('Radii (kpc)')
                     ax2.set_ylabel("Correlations")
                     
                     vel_comps = [ "Data", "MOND", r"$\Lambda$CDM" ]
@@ -439,11 +459,12 @@ if __name__ == "__main__":
     columns = [ "Rad", "Vobs", "Vbar" ]
 
     for i in range(galaxy_count):
-        g = galaxies[i]
+        if testing: g = "g15807_Irr"
+        else: g = galaxies[i]
 
         print("")
         print("==================================")
-        print("Analyzing galaxy "+g+" ("+str(i+1)+"/12)")
+        print(f"Analyzing galaxy {g} ({i+1}/{galaxy_count})")
         print("==================================")
 
         file_path = "/mnt/users/koe/data/Santos-sims/"+g+".dat"
