@@ -3,29 +3,48 @@
 Function for feature extraction.
 """
 import numpy as np
-import itertools
-# from scipy.signal import find_peaks
 
 
-def find_consecutive(arr, stepsize=1):
-    """Split array into groups of consecutive elements."""
-    return np.split(arr, np.where(np.diff(arr) != stepsize)[0]+1)
+# def find_consecutive(arr, stepsize=1):
+    # """Split array into groups of consecutive elements."""
+    # return np.split(arr, np.where(np.diff(arr) != stepsize)[0]+1)
+
+def split_signs(arr):
+    """
+    Split array into positive and negative segments and extract their indices.
+    E.g. Input = [1, 2, -1, 2, 3, 4, -3, -4, 5, 6];
+    Returns [[0, 1], [2], [3, 4, 5], [6, 7], [8, 9]].
+    """
+    split_idx = []
+    idx_pos, idx_neg = [], []
+
+    for i in range(len(arr)):
+        if arr[i] > 0:
+            if len(idx_neg) > 0:
+                split_idx.append(idx_neg)
+                idx_neg = []
+            idx_pos.append(i)
+        elif arr[i] < 0:
+            if len(idx_pos) > 0:
+                split_idx.append(idx_pos)
+                idx_pos = []
+            idx_neg.append(i)
+
+    # Append remaining segment.
+    if len(idx_pos) > 0:
+        split_idx.append(idx_pos)
+    if len(idx_neg) > 0:
+        split_idx.append(idx_neg)
+
+    return split_idx
+
 
 def ft_check(arr, errV, min_height:float=2.0):
-    mask = np.abs(arr) >= errV * min_height
-    if np.count_nonzero(mask) == 0:
-        return [], [], []
-    
-    arr_normalized = np.zeros_like(arr)
-    arr_normalized[mask] = arr[mask] / errV[mask]
-    
-    significant_indices = np.where( np.abs(arr_normalized) > min_height )[0]
-    idx_ft = find_consecutive( significant_indices )
-    arr_ft = np.where( np.abs(arr_normalized) > min_height )[0]
-    idx_ft = find_consecutive( arr_ft )
+    arr_normalized = arr / errV
+    split_idx = split_signs( arr_normalized )
 
-    lb_ft, rb_ft = [], []
-    for segment in idx_ft:
+    lb_ft, rb_ft = [], []   # Lists to store left and right boundaries of features.
+    for segment in split_idx:
         condition = np.abs(np.array(arr_normalized[segment])) > min_height
         if np.count_nonzero(condition) >= 3:
             lb_ft.append(segment[0])
@@ -38,18 +57,15 @@ def ft_check(arr, errV, min_height:float=2.0):
     i = 0
     while i < len(lb_ft):
         lb_features.append(lb_ft[i])
-        if i + 1 < len(lb_ft):
-            if lb_ft[i+1] - rb_ft[i] <= 1:
-                rb_features.append(idx_ft[i+1][-1])
-                i += 2
-            else:
-                rb_features.append(rb_ft[i])
-                i += 1
+        if i + 1 < len(lb_ft) and lb_ft[i+1] - rb_ft[i] <= 1:
+            rb_features.append(rb_ft[i+1])
+            i += 2
         else:
-            rb_features.append(idx_ft[i][-1])
+            rb_features.append(rb_ft[i])
             i += 1
 
     return lb_features, rb_features, [rb_features[i] - lb_features[i] for i in range(len(lb_features))]
+
 
     # lb_peaks, rb_peaks = [], []
     # for segment in idx_peaks:
