@@ -11,7 +11,7 @@ import jax
 
 import matplotlib.pyplot as plt
 import numpy as np
-from scipy import interpolate, stats
+from scipy import stats
 
 from utils_analysis.dtw_utils import dtw
 from utils_analysis.mock_gen import Vbar_sq_unc, MOND_unc, Vobs_scat
@@ -72,15 +72,15 @@ def main(g, r, v_data, v_mock, num_samples=num_samples):
     v_comps = [ "Vbar (SPARC)", "Vobs (MOND)", "Vobs (LCDM)", "Vobs (SPARC)" ]
     colours = [ 'tab:red', 'mediumblue', 'tab:green', 'k' ]
 
-    lb, rb, widths = ft_check(res_data[1], v_data[2])
+    lb, rb, widths = ft_check(res_data[1][5:], v_data[2][5:])
     if len(lb)>0:
         print(f"Feature found in Vobs of {g}")
-        print(f"Properties: lb={lb}, rb={rb}, widths={widths}")
+        print(f"Properties: lb={[x+5 for x in lb]}, rb={[x+5 for x in rb]}, widths={widths}")
 
-    lb, rb, widths = ft_check(res_data[0], res_errors[1,0])
+    lb, rb, widths = ft_check(res_data[0][5:], res_errors[1,0][5:])
     if len(lb)>0:
         print(f"Feature found in Vbar of {g}")
-        print(f"Properties: lb={lb}, rb={rb}, widths={widths}")
+        print(f"Properties: lb={[x+5 for x in lb]}, rb={[x+5 for x in rb]}, widths={widths}")
 
 
     """
@@ -206,27 +206,28 @@ def main(g, r, v_data, v_mock, num_samples=num_samples):
     if do_correlations:
 
         # Interpolate the residuals with cubic Hermite spline splines.
-        v_d0, v_d1, v_d2 = [], [], []
-        for v_comp in res_data:
-            v_d0.append(interpolate.pchip_interpolate(r, v_comp, rad))
-            v_d1.append(interpolate.pchip_interpolate(r, v_comp, rad, der=1))
-            v_d2.append(interpolate.pchip_interpolate(r, v_comp, rad, der=2))
+        # v_d0, v_d1, v_d2 = [], [], []
+        # for v_comp in res_data:
+        #     v_d0.append(interpolate.pchip_interpolate(r, v_comp, rad))
+        #     v_d1.append(interpolate.pchip_interpolate(r, v_comp, rad, der=1))
+        #     v_d2.append(interpolate.pchip_interpolate(r, v_comp, rad, der=2))
         
-        res_fits_data = [ v_d0, v_d1, v_d2 ]
+        # res_fits_data = [ v_d0, v_d1, v_d2 ]
 
         # Compute correlation coefficients for data Vobs vs Vbar.
-        rcorr_data = [ [[], []], [[], []], [[], []] ]
-        for k in range(3):
-            for j in range(10, len(rad)):
-                rcorr_data[k][0].append(stats.spearmanr(res_fits_data[k][0][:j], res_fits_data[k][1][:j])[0])
-                rcorr_data[k][1].append(stats.pearsonr(res_fits_data[k][0][:j], res_fits_data[k][1][:j])[0])
+        # rcorr_data = [ [[], []], [[], []], [[], []] ]
+        pearsonr_data = []
+        # for k in range(3):
+        for j in range(3, len(r)+1):
+            # rcorr_data_d0[0].append(stats.spearmanr(res_data[0][:j], res_data[1][:j])[0])
+            pearsonr_data.append(stats.pearsonr(res_data[0][:j], res_data[1][:j])[0])
 
-        spearman_data.append(rcorr_data[0][0][-1])
-        pearson_data.append(rcorr_data[0][1][-1])
+        # spearman_data.append(rcorr_data_d0[0][-1])
+        pearson_data.append(pearsonr_data[-1])
 
         # Compute correlation coefficients for mock Vobs vs Vbar.
         radii_corr = []     # dim = (num_samples/10, 2 x mock_vcomps, 3 x der, 2 x rho, rad)
-        res_fits_mock = []
+        # res_fits_mock = []
 
         for smp in range(num_samples):
         # for smp in tqdm(range(num_samples), desc="Correlation by radii"):
@@ -234,14 +235,14 @@ def main(g, r, v_data, v_mock, num_samples=num_samples):
                 continue
 
             # Interpolate the residuals with cubic Hermite spline splines.
-            v_d0, v_d1, v_d2 = [], [], []
-            for v_comp in res_mock[:, :, smp]:
-                v_d0.append(interpolate.pchip_interpolate(r, v_comp, rad))
-                v_d1.append(interpolate.pchip_interpolate(r, v_comp, rad, der=1))
-                v_d2.append(interpolate.pchip_interpolate(r, v_comp, rad, der=2))
+            # v_d0, v_d1, v_d2 = [], [], []
+            # for v_comp in res_mock[:, :, smp]:
+            #     v_d0.append(interpolate.pchip_interpolate(r, v_comp, rad))
+            #     v_d1.append(interpolate.pchip_interpolate(r, v_comp, rad, der=1))
+            #     v_d2.append(interpolate.pchip_interpolate(r, v_comp, rad, der=2))
             
-            res_fits = [ v_d0, v_d1, v_d2 ]
-            res_fits_mock.append(res_fits)
+            # res_fits = [ v_d0, v_d1, v_d2 ]
+            # res_fits_mock.append(res_fits)
 
             """
             ----------------------------------------------------
@@ -254,23 +255,24 @@ def main(g, r, v_data, v_mock, num_samples=num_samples):
             correlations_r = []
             
             for i in range(1, 3):
-                rad_corr = [ [[], []], [[], []], [[], []] ]
-                for k in range(3):
-                    for j in range(10, len(rad)):
-                        rad_corr[k][0].append(stats.spearmanr(res_fits[k][0][:j], res_fits[k][i][:j])[0])
-                        rad_corr[k][1].append(stats.pearsonr(res_fits[k][0][:j], res_fits[k][i][:j])[0])
-                correlations_r.append(rad_corr)
+                # rad_corr = [ [[], []], [[], []], [[], []] ]
+                pearsonr_mock = []
+                # for k in range(3):
+                for j in range(3, len(r)+1):
+                    # rcorr_mock_d0[0].append(stats.spearmanr(res_mock[0,:j,smp], res_mock[i,:j,smp])[0])
+                    pearsonr_mock.append(stats.pearsonr(res_mock[0,:j,smp], res_mock[i,:j,smp])[0])
+                correlations_r.append(pearsonr_mock)
             
             radii_corr.append(correlations_r)
         
-        res_fits_percentiles = np.percentile(res_fits_mock, [16.0, 50.0, 84.0], axis=0)
+        res_mock_percentiles = np.percentile(res_mock, [16.0, 50.0, 84.0], axis=2)
         rcorr_percentiles = np.percentile(radii_corr, [16.0, 50.0, 84.0], axis=0)
-        spearman_mock.append([ rcorr_percentiles[:,0,0,0,-1], rcorr_percentiles[:,1,0,0,-1] ])
-        pearson_mock.append([ rcorr_percentiles[:,0,0,1,-1], rcorr_percentiles[:,1,0,1,-1] ])
+        # spearman_mock.append([ rcorr_percentiles[:,0,0,0,-1], rcorr_percentiles[:,1,0,0,-1] ])
+        pearson_mock.append([ rcorr_percentiles[:,0,-1], rcorr_percentiles[:,1,-1] ])
 
 
         """
-        Plot GP fits, residuals (+ PCHIP) and correlations.
+        Plot GP fits, residuals and correlations.
         """
         if make_plots:
             subdir = "correlations/radii/"
@@ -280,83 +282,83 @@ def main(g, r, v_data, v_mock, num_samples=num_samples):
             labels_temp = [ "Vbar (SPARC)", "Vobs (MOND)", r"Vobs ($\Lambda$CDM)", "Vobs (SPARC)" ]
 
             # Compute baryonic dominance, i.e. average Vbar/Vobs(data) from centre to some max radius.
-            bar_ratio = []
-            for rd in range(len(rad)):
-                bar_ratio.append(sum(mean_prediction[0][:rd]/mean_prediction[3][:rd]) / (rd+1))
+            # bar_ratio = []
+            # for rd in range(len(rad)):
+            #     bar_ratio.append(sum(mean_prediction[0][:rd]/mean_prediction[3][:rd]) / (rd+1))
 
             # Plot corrletaions as 1 main plot (+ residuals) + 1 subplot, using only Vobs from data for Vbar/Vobs.
-            der_axis = [ "Residuals (km/s)", "1st derivative", "2nd derivative" ]
+            # der_axis = [ "Residuals (km/s)", "1st derivative", "2nd derivative" ]
 
-            """Spearman correlations"""
-            for der in range(3):
-                fig1, (ax0, ax1, ax2) = plt.subplots(3, 1, sharex=True, gridspec_kw={'height_ratios': [5, 2, 3]})
-                fig1.set_size_inches(7, 7)
-                ax0.set_title("Residuals correlation: "+g)
-                ax0.set_ylabel("Velocities (km/s)")
+            # """Spearman correlations"""
+            # for der in range(1):
+            #     fig1, (ax0, ax1, ax2) = plt.subplots(3, 1, sharex=True, gridspec_kw={'height_ratios': [5, 2, 3]})
+            #     fig1.set_size_inches(7, 7)
+            #     ax0.set_title("Residuals correlation: "+g)
+            #     ax0.set_ylabel("Velocities (km/s)")
                 
-                for j in range(4):
-                    if j == 3:
-                        ax0.errorbar(r, v_data[1], data["errV"], color='k', alpha=0.3, fmt='o', capsize=2)
-                    else:
-                        ax0.errorbar(r, raw_median[j], raw_errors[:, j], c=c_temp[j], alpha=0.3, fmt='o', capsize=2)
-                    # Plot mean prediction from GP.
-                    ax0.plot(rad, mean_prediction[j], color=colours[j], label=labels_temp[j])
-                    # Fill in 1-sigma (68%) confidence band of GP fit.
-                    ax0.fill_between(rad, lower_percentile[j], upper_percentile[j], color=colours[j], alpha=0.2)
+            #     for j in range(4):
+            #         if j == 3:
+            #             ax0.errorbar(r, v_data[1], data["errV"], color='k', alpha=0.3, fmt='o', capsize=2)
+            #         else:
+            #             ax0.errorbar(r, raw_median[j], raw_errors[:, j], c=c_temp[j], alpha=0.3, fmt='o', capsize=2)
+            #         # Plot mean prediction from GP.
+            #         ax0.plot(rad, mean_prediction[j], color=colours[j], label=labels_temp[j])
+            #         # Fill in 1-sigma (68%) confidence band of GP fit.
+            #         ax0.fill_between(rad, lower_percentile[j], upper_percentile[j], color=colours[j], alpha=0.2)
 
-                ax0.legend(bbox_to_anchor=(1, 1), loc="upper left")
-                ax0.grid()
+            #     ax0.legend(bbox_to_anchor=(1, 1), loc="upper left")
+            #     ax0.grid()
 
-                ax1.set_ylabel(der_axis[der])
-                for j in range(4):
-                    # Plots for mock Vobs + Vbar (sampled w/ uncertainties).
-                    if j == 3:
-                        if der == 0:
-                            ax1.errorbar(r, res_data[1], v_data[2], color='k', alpha=0.3, ls='none', fmt='o', capsize=2)
-                        ax1.plot(rad, res_fits_data[der][1], color='k', label=labels_temp[j])
-                    else:
-                        if der == 0:
-                            ax1.scatter(r, res_median[j], c=c_temp[j], alpha=0.3)
-                            # ax1.errorbar(r, res_median[j], res_errors[:, j], color=colours[j], alpha=0.3, ls='none', fmt='o', capsize=2)
-                        ax1.plot(rad, res_fits_percentiles[1][der][j], c=c_temp[j], label=labels_temp[j])
-                        ax1.fill_between(rad, res_fits_percentiles[0][der][j], res_fits_percentiles[2][der][j], color=c_temp[j], alpha=0.15)
+            #     ax1.set_ylabel(der_axis[der])
+            #     for j in range(4):
+            #         # Plots for mock Vobs + Vbar (sampled w/ uncertainties).
+            #         if j == 3:
+            #             if der == 0:
+            #                 ax1.errorbar(r, res_data[1], v_data[2], color='k', alpha=0.3, ls='none', fmt='o', capsize=2)
+            #             ax1.plot(rad, res_data[1], color='k', label=labels_temp[j])
+            #         else:
+            #             if der == 0:
+            #                 ax1.scatter(r, res_median[j], c=c_temp[j], alpha=0.3)
+            #                 # ax1.errorbar(r, res_median[j], res_errors[:, j], color=colours[j], alpha=0.3, ls='none', fmt='o', capsize=2)
+            #             ax1.plot(rad, res_mock_percentiles[1][j], c=c_temp[j], label=labels_temp[j])
+            #             ax1.fill_between(rad, res_mock_percentiles[0][j], res_mock_percentiles[2][j], color=c_temp[j], alpha=0.15)
 
-                ax1.grid()
+            #     ax1.grid()
 
-                ax2.set_xlabel(r'Normalised radius ($\times R_{eff}$)')
-                ax2.set_ylabel("Correlations w/ Vbar")
+            #     ax2.set_xlabel("Radii (kpc)")
+            #     ax2.set_ylabel("Correlations w/ Vbar")
                 
-                vel_comps = [ "MOND", r"$\Lambda$CDM", "Data" ]
+            #     vel_comps = [ "MOND", r"$\Lambda$CDM", "Data" ]
 
-                for j in range(2):
-                    mean_spearmanr = 0.
-                    mean_pearsonr = 0.
+            #     for j in range(2):
+            #         mean_spearmanr = 0.
+            #         mean_pearsonr = 0.
 
-                    ax2.plot(rad[10:], rcorr_percentiles[1][j][der][0], c=c_temp[j+1], label=vel_comps[j]+r": Spearman $\rho$")
-                    ax2.fill_between(rad[10:], rcorr_percentiles[0][j][der][0], rcorr_percentiles[2][j][der][0], color=colours[j+1], alpha=0.2)
+            #         ax2.plot(rad[10:], rcorr_percentiles[1][j][der][0], c=c_temp[j+1], label=vel_comps[j]+r": Spearman $\rho$")
+            #         ax2.fill_between(rad[10:], rcorr_percentiles[0][j][der][0], rcorr_percentiles[2][j][der][0], color=colours[j+1], alpha=0.2)
                     
-                    for smp in range(len(radii_corr)):
-                        mean_spearmanr += stats.spearmanr(radii_corr[smp][j][der][0], bar_ratio[10:])[0] / len(radii_corr)
-                        mean_pearsonr += stats.pearsonr(radii_corr[smp][j][der][1], bar_ratio[10:])[0] / len(radii_corr)
-                    ax2.plot([], [], ' ', label=r": $\rho_s=$"+str(round(mean_spearmanr, 3)))
+            #         for smp in range(len(radii_corr)):
+            #             mean_spearmanr += stats.spearmanr(radii_corr[smp][j][der][0], bar_ratio[10:])[0] / len(radii_corr)
+            #             mean_pearsonr += stats.pearsonr(radii_corr[smp][j][der][1], bar_ratio[10:])[0] / len(radii_corr)
+            #         ax2.plot([], [], ' ', label=r": $\rho_s=$"+str(round(mean_spearmanr, 3)))
 
-                ax2.plot(rad[10:], rcorr_data[der][0], c='k', label=vel_comps[2]+r": Spearman $\rho$")
-                ax2.plot([], [], ' ', label=r": $\rho_s=$"+str(round(np.nanmean(rcorr_data[der][0]), 3)))
+            #     ax2.plot(rad[10:], rcorr_data[der][0], c='k', label=vel_comps[2]+r": Spearman $\rho$")
+            #     ax2.plot([], [], ' ', label=r": $\rho_s=$"+str(round(np.nanmean(rcorr_data[der][0]), 3)))
 
-                ax5 = ax2.twinx()
-                ax5.set_ylabel(r'Average $v_{bar}/v_{obs}$')
-                ax5.plot(rad[10:], bar_ratio[10:], '--', color=color_bar, label="Vbar/Vobs")
-                ax5.tick_params(axis='y', labelcolor=color_bar)
+            #     ax5 = ax2.twinx()
+            #     ax5.set_ylabel(r'Average $v_{bar}/v_{obs}$')
+            #     ax5.plot(rad[10:], bar_ratio[10:], '--', color=color_bar, label="Vbar/Vobs")
+            #     ax5.tick_params(axis='y', labelcolor=color_bar)
                 
-                # ax2.legend(bbox_to_anchor=(1.64, 1.3))
-                ax2.grid()
+            #     # ax2.legend(bbox_to_anchor=(1.64, 1.3))
+            #     ax2.grid()
 
-                plt.subplots_adjust(hspace=0.05)
-                fig1.savefig(fileloc+subdir+deriv_dir[der]+g+".png", dpi=300, bbox_inches="tight")
-                plt.close()
+            #     plt.subplots_adjust(hspace=0.05)
+            #     fig1.savefig(fileloc+subdir+deriv_dir[der]+g+".png", dpi=300, bbox_inches="tight")
+            #     plt.close()
 
             """Pearson correlations."""
-            for der in range(3):
+            for der in range(1):
                 fig1, (ax0, ax1, ax2) = plt.subplots(3, 1, sharex=True, gridspec_kw={'height_ratios': [5, 2, 3]})
                 fig1.set_size_inches(7, 7)
                 ax0.set_title("Residuals correlation: "+g)
@@ -375,46 +377,46 @@ def main(g, r, v_data, v_mock, num_samples=num_samples):
                 ax0.legend(bbox_to_anchor=(1, 1), loc="upper left")
                 ax0.grid()
 
-                ax1.set_ylabel(der_axis[der])
+                ax1.set_ylabel("Residuals (km/s)")
                 for j in range(4):
                     # Plots for mock Vobs + Vbar (sampled w/ uncertainties).
                     if j == 3:
-                        if der == 0:
-                            ax1.errorbar(r, res_data[1], v_data[2], color='k', alpha=0.3, ls='none', fmt='o', capsize=2)
-                        ax1.plot(rad, res_fits_data[der][1], color='k', label=labels_temp[j])
+                        # if der == 0:
+                        ax1.errorbar(r, res_data[1], v_data[2], color='k', alpha=0.3, ls='none', fmt='o', capsize=2)
+                        ax1.plot(r, res_data[1], color='k', label=labels_temp[j])
                     else:
-                        if der == 0:
-                            ax1.scatter(r, res_median[j], c=c_temp[j], alpha=0.3)
-                            # ax1.errorbar(r, res_median[j], res_errors[:, j], color=colours[j], alpha=0.3, ls='none', fmt='o', capsize=2)
-                        ax1.plot(rad, res_fits_percentiles[1][der][j], c=c_temp[j], label=labels_temp[j])
-                        ax1.fill_between(rad, res_fits_percentiles[0][der][j], res_fits_percentiles[2][der][j], color=c_temp[j], alpha=0.15)
+                        # if der == 0:
+                        ax1.scatter(r, res_median[j], c=c_temp[j], alpha=0.3)
+                        # ax1.errorbar(r, res_median[j], res_errors[:, j], color=colours[j], alpha=0.3, ls='none', fmt='o', capsize=2)
+                        ax1.plot(r, res_mock_percentiles[1][j], c=c_temp[j], label=labels_temp[j])
+                        ax1.fill_between(r, res_mock_percentiles[0][j], res_mock_percentiles[2][j], color=c_temp[j], alpha=0.15)
 
                 ax1.grid()
 
-                ax2.set_xlabel(r'Normalised radius ($\times R_{eff}$)')
+                ax2.set_xlabel("Radii (kpc)")
                 ax2.set_ylabel("Correlations w/ Vbar")
                 
                 vel_comps = [ "MOND", r"$\Lambda$CDM", "Data" ]
 
                 for j in range(2):
-                    mean_spearmanr = 0.
-                    mean_pearsonr = 0.
+                    # mean_spearmanr = 0.
+                    # mean_pearsonr = 0.
 
-                    ax2.plot(rad[10:], rcorr_percentiles[1][j][der][1], c=c_temp[j+1], label=vel_comps[j]+r": Pearson $\rho$")
-                    ax2.fill_between(rad[10:], rcorr_percentiles[0][j][der][1], rcorr_percentiles[2][j][der][0], color=colours[j+1], alpha=0.2)
+                    ax2.plot(r[2:], rcorr_percentiles[1][j], c=c_temp[j+1], label=vel_comps[j]+r": Pearson $\rho$")
+                    ax2.fill_between(r[2:], rcorr_percentiles[0][j], rcorr_percentiles[2][j], color=colours[j+1], alpha=0.2)
                     
-                    for smp in range(len(radii_corr)):
-                        mean_spearmanr += stats.spearmanr(radii_corr[smp][j][der][0], bar_ratio[10:])[0] / len(radii_corr)
-                        mean_pearsonr += stats.pearsonr(radii_corr[smp][j][der][1], bar_ratio[10:])[0] / len(radii_corr)
-                    ax2.plot([], [], ' ', label=r": $\rho_s=$"+str(round(mean_spearmanr, 3))+r", $\rho_p=$"+str(round(mean_pearsonr, 3)))
+                    # for smp in range(len(radii_corr)):
+                        # mean_spearmanr += stats.spearmanr(radii_corr[smp][j][der][0], bar_ratio[10:])[0] / len(radii_corr)
+                        # mean_pearsonr += stats.pearsonr(radii_corr[smp][j][der][1], bar_ratio[10:])[0] / len(radii_corr)
+                    # ax2.plot([], [], ' ', label=r"$\rho_p=$"+str(round(mean_pearsonr, 3)))
 
-                ax2.plot(rad[10:], rcorr_data[der][1], c='k', label=vel_comps[2]+r": Pearson $\rho$")
-                ax2.plot([], [], ' ', label=r": $\rho_s=$"+str(round(np.nanmean(rcorr_data[der][0]), 3))+r", $\rho_p=$"+str(round(np.nanmean(rcorr_data[der][1]), 3)))
+                ax2.plot(r[2:], pearsonr_data, c='k', label=r"Data: Pearson $\rho$")
+                ax2.plot([], [], ' ', label=r"$\rho_p=$"+str(round(np.nanmean(pearsonr_data), 3)))
 
-                ax5 = ax2.twinx()
-                ax5.set_ylabel(r'Average $v_{bar}/v_{obs}$')
-                ax5.plot(rad[10:], bar_ratio[10:], '--', color=color_bar, label="Vbar/Vobs")
-                ax5.tick_params(axis='y', labelcolor=color_bar)
+                # ax5 = ax2.twinx()
+                # ax5.set_ylabel(r'Average $v_{bar}/v_{obs}$')
+                # ax5.plot(rad[10:], bar_ratio[10:], '--', color=color_bar, label="Vbar/Vobs")
+                # ax5.tick_params(axis='y', labelcolor=color_bar)
                 
                 # ax2.legend(bbox_to_anchor=(1.64, 1.3))
                 ax2.grid()
@@ -578,7 +580,8 @@ if __name__ == "__main__":
     bulged_count = 0
     xbulge_count = 0
     
-    spearman_data, pearson_data, spearman_mock, pearson_mock = [], [], [], []
+    # spearman_data, spearman_mock = [], []
+    pearson_data, pearson_mock = [], []
     dtw_cost = [ [], [], [] ]
     norm_cost = [ [], [], [] ]
     mse_perc = [ [], [], [] ]
@@ -592,7 +595,7 @@ if __name__ == "__main__":
         rawdata = np.loadtxt(file_path)
         data = pd.DataFrame(rawdata, columns=columns)
         bulged = np.any(data["Vbul"]>0) # Check whether galaxy has bulge.
-        r = data["Rad"] / table["Rdisk"][i_tab] # Normalised radius (Rdisk = scale length of stellar disk).
+        r = data["Rad"].to_numpy()
 
         # data_copies = np.array([data["Vobs"]] * num_samples).T
 
@@ -617,7 +620,7 @@ if __name__ == "__main__":
             xbulge_count += 1
 
         print("\nAnalyzing galaxy "+g+" ("+str(i+1)+"/60)")
-        main(g, r.to_numpy(), v_data, v_mock)
+        main(g, r, v_data, v_mock)
 
     print("Max memory usage: %s (kb)" %getrusage(RUSAGE_SELF).ru_maxrss)
 
@@ -676,13 +679,13 @@ if __name__ == "__main__":
 
             # Plot histogram of normalized DTW alignment costs of all galaxies.
             if fname_DTW == fileloc+"dtw/cost_vsLCDM/": plt.title(r"Normalized DTW alignment costs (relative to $\Lambda$CDM)")
-            elif fname_DTW == fileloc+"dtw/cost_meansq/": plt.title("Normalized DTW alignment costs (relative to Vbar)")
+            elif fname_DTW == fileloc+"dtw/cost_vsVbar/": plt.title("Normalized DTW alignment costs (relative to Vbar)")
             else: plt.title("Normalized DTW alignment costs (relative to MOND)")
 
             hist_labels = [ "Data", "MOND", r"$\Lambda$CDM" ]
             colours = [ 'k', 'mediumblue', 'tab:green' ]
 
-            if fname_DTW == fileloc+"dtw/cost_meansq/":
+            if fname_DTW == fileloc+"dtw/cost_vsVbar/":
                 plt.bar(galaxies, norm_percentiles[2][0], color=colours[0], alpha=0.3, label=hist_labels[0])
 
             for j in range(3):
@@ -703,7 +706,7 @@ if __name__ == "__main__":
                     # plt.fill_between(galaxies, low_norm2, up_norm2, color=colours[j], alpha=0.1)
 
                 plt.axhline(y=mean_norm, color=colours[j], linestyle='dashed', label="Mean = {:.4f}".format(mean_norm))
-                if not(fname_DTW == fileloc+"dtw/cost_meansq/" and j == 0):
+                if not(fname_DTW == fileloc+"dtw/cost_vsVbar/" and j == 0):
                     plt.errorbar(galaxies, norm_percentiles[2][j], [low_err, up_err], fmt='.', ls='none',
                                 capsize=2, color=colours[j], alpha=0.5, label=hist_labels[j])
                             
@@ -775,35 +778,35 @@ if __name__ == "__main__":
         Plot histogram of Spearman coefficients across RC (in ascending order of coefficients for data).
         """
         if do_correlations:
-            """Spearman histogram"""
-            # Rearrange galaxies into ascending order in median of corr(MOND, Vbar).
-            # dim = (# of galaxies, 2 x mock_vcomps, 3 x percentiles)
-            mock_sorted = np.array(sorted(spearman_mock, key=lambda x: x[0][0]))
+            # """Spearman histogram"""
+            # # Rearrange galaxies into ascending order in median of corr(MOND, Vbar).
+            # # dim = (# of galaxies, 2 x mock_vcomps, 3 x percentiles)
+            # mock_sorted = np.array(sorted(spearman_mock, key=lambda x: x[0][0]))
 
-            plt.title("Spearman coefficients across RC")
-            hist_labels = [ "Data", "MOND", r"$\Lambda$CDM" ]
-            colours = [ 'k', 'mediumblue', 'tab:green' ]
+            # plt.title("Spearman coefficients across RC")
+            # hist_labels = [ "Data", "MOND", r"$\Lambda$CDM" ]
+            # colours = [ 'k', 'mediumblue', 'tab:green' ]
 
-            mean_corr = np.nanmean(spearman_data)
-            plt.bar(galaxies, sorted(spearman_data), color=colours[0], alpha=0.3, label=hist_labels[0])
-            plt.axhline(y=mean_corr, color=colours[0], linestyle='dashed', label="Mean = {:.4f}".format(mean_corr))
+            # mean_corr = np.nanmean(spearman_data)
+            # plt.bar(galaxies, sorted(spearman_data), color=colours[0], alpha=0.3, label=hist_labels[0])
+            # plt.axhline(y=mean_corr, color=colours[0], linestyle='dashed', label="Mean = {:.4f}".format(mean_corr))
 
-            for j in range(2):
-                med_corr = np.nanmean(mock_sorted[:,j,1])
-                low_err = mock_sorted[:,j,1] - mock_sorted[:,j,0]
-                up_err = mock_sorted[:,j,2] - mock_sorted[:,j,1]
+            # for j in range(2):
+            #     med_corr = np.nanmean(mock_sorted[:,j,1])
+            #     low_err = mock_sorted[:,j,1] - mock_sorted[:,j,0]
+            #     up_err = mock_sorted[:,j,2] - mock_sorted[:,j,1]
 
-                low_norm1 = np.full(galaxy_count, np.nanmean(mock_sorted[:,j,2]))
-                up_norm1 = np.full(galaxy_count, np.nanmean(mock_sorted[:,j,0]))
+            #     low_norm1 = np.full(galaxy_count, np.nanmean(mock_sorted[:,j,2]))
+            #     up_norm1 = np.full(galaxy_count, np.nanmean(mock_sorted[:,j,0]))
 
-                plt.errorbar(galaxies, mock_sorted[:,j,1], [low_err, up_err], fmt='.', ls='none', capsize=2, color=colours[j+1], alpha=0.5, label=hist_labels[j+1])
-                plt.axhline(y=med_corr, color=colours[j+1], linestyle='dashed', label="Mean = {:.4f}".format(med_corr))
-                plt.fill_between(galaxies, low_norm1, up_norm1, color=colours[j+1], alpha=0.25)
+            #     plt.errorbar(galaxies, mock_sorted[:,j,1], [low_err, up_err], fmt='.', ls='none', capsize=2, color=colours[j+1], alpha=0.5, label=hist_labels[j+1])
+            #     plt.axhline(y=med_corr, color=colours[j+1], linestyle='dashed', label="Mean = {:.4f}".format(med_corr))
+            #     plt.fill_between(galaxies, low_norm1, up_norm1, color=colours[j+1], alpha=0.25)
             
-            plt.legend()
-            plt.xticks([])
-            plt.savefig(fileloc+"correlations/radii/histo1.png", dpi=300, bbox_inches="tight")
-            plt.close()
+            # plt.legend()
+            # plt.xticks([])
+            # plt.savefig(fileloc+"correlations/radii/histo1.png", dpi=300, bbox_inches="tight")
+            # plt.close()
 
             """Pearson histogram"""
             # Rearrange galaxies into ascending order in median of corr(MOND, Vbar).
