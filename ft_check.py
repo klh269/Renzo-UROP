@@ -13,7 +13,6 @@ import argparse
 
 from utils_analysis.toy_gen import toy_gen
 from utils_analysis.Vobs_fits import Vbar_sq
-# from utils_analysis.med_filter import med_filter
 from utils_analysis.little_things import get_things_res
 from utils_analysis.toy_GP import GP_fit, GP_residuals
 from utils_analysis.extract_ft import ft_check
@@ -149,17 +148,16 @@ def NGC1560_ft():
 
 def SPARC_ft(testing:bool=False):
     # Get galaxy data from table1.
-    file = "/mnt/users/koe/SPARC_Lelli2016c.mrt.txt"
+    # file = "/mnt/users/koe/SPARC_Lelli2016c.mrt.txt"
 
-    SPARC_c = [ "Galaxy", "T", "D", "e_D", "f_D", "Inc",
-            "e_Inc", "L", "e_L", "Reff", "SBeff", "Rdisk",
-                "SBdisk", "MHI", "RHI", "Vflat", "e_Vflat", "Q", "Ref."]
-    table = pd.read_fwf(file, skiprows=98, names=SPARC_c)
+    # SPARC_c = [ "Galaxy", "T", "D", "e_D", "f_D", "Inc",
+    #         "e_Inc", "L", "e_L", "Reff", "SBeff", "Rdisk",
+    #             "SBdisk", "MHI", "RHI", "Vflat", "e_Vflat", "Q", "Ref."]
+    # table = pd.read_fwf(file, skiprows=98, names=SPARC_c)
 
     columns = [ "Rad", "Vobs", "errV", "Vgas",
                 "Vdisk", "Vbul", "SBdisk", "SBbul" ]
 
-    pgals, pgals_Vobs, pgals_Vbar = [], [], []
     galaxies = np.load("/mnt/users/koe/gp_fits/galaxy.npy")
     galaxy_count = 1 if testing else len(galaxies)
 
@@ -174,7 +172,7 @@ def SPARC_ft(testing:bool=False):
         rawdata = np.loadtxt(file_path)
         data = pd.DataFrame(rawdata, columns=columns)
         bulged = np.any(data["Vbul"]>0) # Check whether galaxy has bulge.
-        r = data["Rad"] / table["Rdisk"][i]    # Normalize radius by disk scale length.
+        r = data["Rad"].to_numpy()
 
         Vbar2 = Vbar_sq(data, bulged)
         v_components = np.array([ np.sqrt(Vbar2), data["Vobs"] ])
@@ -185,7 +183,6 @@ def SPARC_ft(testing:bool=False):
         mean_prediction = [ gp_fits[1], gp_fits[3], gp_fits[4], gp_fits[2] ]    # Mean predictions from GP for [ Vbar, MOND, LCDM, Vobs ]
 
         # Compute residuals of fits.
-        # res_Vbar_data, res_Vobs = [], []
         res_Vobs = []
         for k in range(len(r)):
             idx = (np.abs(rad - r[k])).argmin()
@@ -193,23 +190,49 @@ def SPARC_ft(testing:bool=False):
             res_Vobs.append(v_components[1][k] - mean_prediction[3][idx])
 
         # res_data = np.array([ res_Vbar_data, res_Vobs ])    # dim = (2, len(r))
-        # have_peaks = True
-
-        # for res in range(2):
-        #     label = "Vbar" if res == 0 else "Vobs"
-            # _, residuals = med_filter( r, v_components[res], axes=0 )
-            # residuals = res_data[res]
-
-        # print(res_Vobs)
-        # print(np.array(data["errV"]))
-        # print(np.array(res_Vobs) / np.array(data["errV"]))
 
         for noise in np.flip(noise_arr):
-            _, _, widths = ft_check( np.array(res_Vobs), np.array(data["errV"]), noise )
+            _, _, widths = ft_check( np.array(res_Vobs)[5:], np.array(data["errV"])[5:], noise )
             if len(widths) > 0:
                 if noise == noise_arr[-1]: print(g)
                 SPARC_noise_threshold.append(noise)
                 break
+    
+    return SPARC_noise_threshold
+
+
+def SPARC_error_model(num_samples:int):
+    # Sample from errV and apply the same ft idenfitication procedure;
+    # we suspect that the lack of features is due to an overestimation of errors in SPARC.
+    columns = [ "Rad", "Vobs", "errV", "Vgas",
+                "Vdisk", "Vbul", "SBdisk", "SBbul" ]
+
+    galaxies = np.load("/mnt/users/koe/gp_fits/galaxy.npy")
+    galaxy_count = len(galaxies)
+
+    noise_arr = np.linspace(0.1, 10.0, 100)
+    SPARC_err_thresholds = []
+
+    for i in tqdm(range(galaxy_count), desc="SPARC error model"):
+        g = galaxies[i]
+
+        file_path = "/mnt/users/koe/data/"+g+"_rotmod.dat"
+        rawdata = np.loadtxt(file_path)
+        data = pd.DataFrame(rawdata, columns=columns)
+        errV = data["errV"].to_numpy()
+
+        errV_copies = np.tile(errV, (num_samples, 1))    # dim = (num_samples, len(errV))
+        errV_zeros = np.zeros_like(errV_copies)
+        residuals = np.random.normal(errV_zeros, errV_copies)
+
+        for smp in range(num_samples):
+            for noise in np.flip(noise_arr):
+                _, _, widths = ft_check( np.array(residuals[smp]), errV, noise )
+                if len(widths) > 0:
+                    SPARC_err_thresholds.append(noise)
+                    break
+
+    return SPARC_err_thresholds
 
 
 def THINGS_ft():
@@ -253,15 +276,31 @@ def THINGS_error_model(num_samples:int):
 
 
 if __name__ == "__main__":
-    num_samples = 10000
-    THINGS_err_thresholds = THINGS_error_model(num_samples)
-    THINGS_noise_thresholds = THINGS_ft()
+    num_samples = 1000
 
-    plt.hist(THINGS_err_thresholds, bins=np.arange(0.0, 2.0, 0.1), weights=np.ones(np.shape(THINGS_err_thresholds))/num_samples, alpha=0.4, color="k", label="Expected distribution from MC sampling")
-    plt.hist(THINGS_noise_thresholds, bins=np.arange(0.0, 2.0, 0.1), alpha=0.5, color="tab:blue", label="Features extracted from data")
-    # plt.hist(SPARC_noise_threshold[1], bins=50, alpha=0.5, label="SPARC")
+    """Histogram for THINGS."""
+    # THINGS_err_thresholds = THINGS_error_model(num_samples)
+    # THINGS_noise_thresholds = THINGS_ft()
+
+    # plt.hist(THINGS_err_thresholds, bins=np.arange(0.0, 2.0, 0.1), weights=np.ones(np.shape(THINGS_err_thresholds))/num_samples, alpha=0.4, color="k", label="Expected distribution from MC sampling")
+    # plt.hist(THINGS_noise_thresholds, bins=np.arange(0.0, 2.0, 0.1), alpha=0.5, color="tab:blue", label="Features extracted from data")
+    # # plt.hist(SPARC_noise_threshold[1], bins=50, alpha=0.5, label="SPARC")
+
+    # plt.xlabel("Noise threshold")
+    # plt.ylabel("Number of galaxies")
+    # plt.legend()
+    # plt.savefig("/mnt/users/koe/plots/THINGS_ft_check.png", dpi=300, bbox_inches="tight")
+    # plt.close()
+
+    """Histogram for SPARC."""
+    SPARC_err_thresholds = SPARC_error_model(num_samples)
+    SPARC_noise_thresholds = SPARC_ft()
+
+    plt.hist(SPARC_err_thresholds, bins=np.arange(0.0, 10.0, 0.1), weights=np.ones(np.shape(SPARC_err_thresholds))/num_samples, alpha=0.4, color="k", label="Expected distribution from MC sampling")
+    plt.hist(SPARC_noise_thresholds, bins=np.arange(0.0, 10.0, 0.1), alpha=0.5, color="tab:blue", label="Features extracted from data")
 
     plt.xlabel("Noise threshold")
     plt.ylabel("Number of galaxies")
     plt.legend()
-    plt.savefig("/mnt/users/koe/plots/ft_check.png", dpi=300, bbox_inches="tight")
+    plt.savefig("/mnt/users/koe/plots/SPARC_ft_check.png", dpi=300, bbox_inches="tight")
+    plt.close()
