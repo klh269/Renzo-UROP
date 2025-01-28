@@ -22,7 +22,7 @@ from utils_analysis.extract_ft import ft_check
 testing = False
 test_multiple = False   # Loops over the first handful of galaxies instead of just the fist one (DDO161).
 make_plots = True
-use_DTW = True
+use_DTW = False
 use_MSE = False
 do_correlations = True
 
@@ -276,7 +276,7 @@ def main(g, r, v_data, v_mock, num_samples=num_samples):
         """
         if make_plots:
             subdir = "correlations/radii/"
-            color_bar = "orange"
+            # color_bar = "orange"
             deriv_dir = [ "d0/", "d1/", "d2/" ]
             c_temp = [ 'tab:red', 'mediumblue', 'tab:green' ]
             labels_temp = [ "Vbar (SPARC)", "Vobs (MOND)", r"Vobs ($\Lambda$CDM)", "Vobs (SPARC)" ]
@@ -382,14 +382,14 @@ def main(g, r, v_data, v_mock, num_samples=num_samples):
                     # Plots for mock Vobs + Vbar (sampled w/ uncertainties).
                     if j == 3:
                         # if der == 0:
-                        ax1.errorbar(r, res_data[1], v_data[2], color='k', alpha=0.3, ls='none', fmt='o', capsize=2)
-                        ax1.plot(r, res_data[1], color='k', label=labels_temp[j])
+                        ax1.errorbar(r[5:], res_data[1][5:], v_data[2][5:], color='k', alpha=0.3, ls='none', fmt='o', capsize=2)
+                        ax1.plot(r[5:], res_data[1][5:], color='k', label=labels_temp[j])
                     else:
                         # if der == 0:
-                        ax1.scatter(r, res_median[j], c=c_temp[j], alpha=0.3)
+                        ax1.scatter(r[5:], res_median[j][5:], c=c_temp[j], alpha=0.3)
                         # ax1.errorbar(r, res_median[j], res_errors[:, j], color=colours[j], alpha=0.3, ls='none', fmt='o', capsize=2)
-                        ax1.plot(r, res_mock_percentiles[1][j], c=c_temp[j], label=labels_temp[j])
-                        ax1.fill_between(r, res_mock_percentiles[0][j], res_mock_percentiles[2][j], color=c_temp[j], alpha=0.15)
+                        ax1.plot(r[5:], res_mock_percentiles[1][j][5:], c=c_temp[j], label=labels_temp[j])
+                        ax1.fill_between(r[5:], res_mock_percentiles[0][j][5:], res_mock_percentiles[2][j][5:], color=c_temp[j], alpha=0.15)
 
                 ax1.grid()
 
