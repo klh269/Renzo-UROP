@@ -31,16 +31,16 @@ from utils_analysis.Vobs_fits import MOND_vsq, NFW_fit, BIC_from_samples
 matplotlib.use("Agg")  # noqa: E402
 
 
-testing = True
-make_plots = True
-do_DTW = True
-do_correlations = True
+testing = False
+make_plots = False
+do_DTW = False
+do_correlations = False
 
 fileloc = "/mnt/users/koe/plots/Santos-Santos/"
 
 
 # Main code to run.
-def main(args, g, X, Y, X_test): 
+def main(args, ls, g, X, Y, X_test): 
     """
     Do inference for Vbar with uniform prior for correlation length,
     then apply the resulted lengthscale to Vobs (both real and mock data).
@@ -48,82 +48,34 @@ def main(args, g, X, Y, X_test):
     v_comps = [ r"$v_{bar}$", r"$v_{obs}$", r"$v_{MOND}$", r"$V_{\Lambda CDM}$" ]
     colours = [ 'tab:red', 'k', 'mediumblue', 'tab:green' ]
     corner_dir = [ "Vbar/", "Vobs_data/", "Vobs_MOND/", "Vobs_LCDM/" ]
-    mean_prediction = []
-    percentiles = []
+    mean_prediction, percentiles = [], []
 
-    # GP on Vbar with uniform prior on length.
-    print("Fitting function to " + v_comps[0] + "...")
-    rng_key, rng_key_predict = random.split(random.PRNGKey(0))
-    if testing:
-        # Remove feature from Vobs before fitting GP.
-        X_Xft, Vobs_Xft = np.delete(X, np.s_[10:15], axis=0), np.delete(Y[0], np.s_[10:15], axis=0)
-        samples = run_inference(model, args, rng_key, X_Xft, Vobs_Xft)
-    else:
-        samples = run_inference(model, args, rng_key, X, Y[0])
-
-    # do prediction
-    vmap_args = (
-        random.split(rng_key_predict, samples["var"].shape[0]),
-        samples["var"],
-        samples["length"],
-        samples["noise"],
-    )
-    if testing:
-        means, predictions = vmap(
-            lambda rng_key, var, length, noise: predict(
-                rng_key, X_Xft, Vobs_Xft, X_test, var, length, noise, use_cholesky=args.use_cholesky
-            )
-        )(*vmap_args)
-    else:
-        means, predictions = vmap(
-            lambda rng_key, var, length, noise: predict(
-                rng_key, X, Y[0], X_test, var, length, noise, use_cholesky=args.use_cholesky
-            )
-        )(*vmap_args)
-
-    mean_pred = np.mean(means, axis=0)
-    mean_prediction.append(mean_pred)
-    gp_predictions[0] = mean_pred
-
-    confidence_band = np.percentile(predictions, [16.0, 84.0], axis=0)
-    percentiles.append(confidence_band)
-    gp_16percent[0] = confidence_band[0]
-    gp_84percent[0] = confidence_band[1]
-
-    if make_plots:
-        labels = ["length", "var", "noise"]
-        samples_arr = np.vstack([samples[label] for label in labels]).T
-        fig = corner.corner(samples_arr, show_titles=True, labels=labels, title_fmt=".3f", quantiles=[0.16, 0.5, 0.84], smooth=1)
-        fig.savefig(fileloc+"corner_plots/"+corner_dir[0]+g+".png", dpi=300, bbox_inches="tight")
-        plt.close(fig)
-
-    # GP on Vobs with fixed hyperparameters from Vbar.
-    vr = stats.mode(np.round(samples["var"], 0))[0]
-    print(f"var MAP = {vr}")
-    ls = stats.mode(np.round(samples["length"], 2))[0]
-    print(f"length MAP = {ls}")
-    ns = stats.mode(np.round(samples["noise"], 1))[0]
-    print(f"noise MAP = {ns}")
-
-    for j in range(1, 4):
-        print("\nFitting function to " + v_comps[j] + " with length = " + str(round(ls, 2)) + "...")
+    for j in range(4):
+        print("Fitting function to " + v_comps[j] + "...")
         rng_key, rng_key_predict = random.split(random.PRNGKey(0))
+        if testing:
+            # Remove feature from Vobs before fitting GP.
+            X_Xft, Vobs_Xft = np.delete(X, np.s_[10:15], axis=0), np.delete(Y[j], np.s_[10:15], axis=0)
+            samples = run_inference(model, args, rng_key, X_Xft, Vobs_Xft)
+        else:
+            samples = run_inference(model, args, rng_key, X, Y[j])
 
         # do prediction
         vmap_args = (
             random.split(rng_key_predict, samples["var"].shape[0]),
+            samples["var"],
+            samples["noise"],
         )
         if testing:
-            Vcomp_Xft = np.delete(Y[j], np.s_[10:15], axis=0)
             means, predictions = vmap(
-                lambda rng_key: predict(
-                    rng_key, X_Xft, Vcomp_Xft, X_test, vr, ls, ns, use_cholesky=args.use_cholesky
+                lambda rng_key, var, noise: predict(
+                    rng_key, X_Xft, Vobs_Xft, X_test, var, ls, noise, use_cholesky=args.use_cholesky
                 )
             )(*vmap_args)
         else:
             means, predictions = vmap(
-                lambda rng_key: predict(
-                    rng_key, X, Y[j], X_test, vr, ls, ns, use_cholesky=args.use_cholesky
+                lambda rng_key, var, noise: predict(
+                    rng_key, X, Y[j], X_test, var, ls, noise, use_cholesky=args.use_cholesky
                 )
             )(*vmap_args)
 
@@ -139,7 +91,7 @@ def main(args, g, X, Y, X_test):
         if make_plots:
             labels = ["var", "noise"]
             samples_arr = np.vstack([samples[label] for label in labels]).T
-            fig = corner.corner(samples_arr, show_titles=True, labels=labels, title_fmt=".5f", quantiles=[0.16, 0.5, 0.84], smooth=1)
+            fig = corner.corner(samples_arr, show_titles=True, labels=labels, title_fmt=".4f", quantiles=[0.16, 0.5, 0.84], smooth=1)
             fig.savefig(fileloc+"corner_plots/"+corner_dir[j]+g+".png", dpi=300, bbox_inches="tight")
             plt.close(fig)
 
@@ -422,7 +374,7 @@ def main(args, g, X, Y, X_test):
     jax.clear_caches()    # One-line attempt to solve the JIT memory allocation problem.
 
 
-if __name__ == "__main__":
+def GP_args():
     assert numpyro.__version__.startswith("0.15.0")
     numpyro.enable_x64()
     parser = argparse.ArgumentParser(description="Gaussian Process example") # To keep the inference from getting constant samples.
@@ -442,21 +394,23 @@ if __name__ == "__main__":
     parser.add_argument("--testing", default=testing, type=bool)
     args = parser.parse_args()
 
+    return args
+
+
+if __name__ == "__main__":
+    args = GP_args()
     numpyro.set_platform(args.device)
     numpyro.set_host_device_count(args.num_chains)
-
-
-    # Define constants
-    G = 4.300e-6    # Gravitational constant G (kpc (km/s)^2 solarM^(-1))
     
     spearman_data, pearson_data = [], []
-    dtw_cost = [ [], [], [] ]
-    norm_cost = [ [], [], [] ]
+    dtw_cost, norm_cost = [ [], [], [] ], [ [], [], [] ]
 
     galaxies = [ "g1536_Irr", "g1536_MW", "g5664_Irr", "g5664_MW", "g7124_Irr", "g7124_MW",
                  "g15784_Irr", "g15784_MW", "g15807_Irr", "g21647_Irr", "g21647_MW", "g22437_Irr" ]
     galaxy_count = 1 if testing else len(galaxies)
     columns = [ "Rad", "Vobs", "Vbar" ]
+
+    ls_dict = np.load("/mnt/users/koe/gp_fits/ls_dict.npy", allow_pickle=True).item()
 
     for i in range(galaxy_count):
         if testing: g = "g15807_Irr"
@@ -487,9 +441,10 @@ if __name__ == "__main__":
         v_LCDM = np.median(samples["Vpred"], axis=0)
         v_MOND = np.sqrt(MOND_vsq(r, Vbar**2))
         v_components = np.array([ Vbar, data["Vobs"], v_MOND, v_LCDM ])
+
+        np.save(f"/mnt/users/koe/MCMC_fits/Santos-Santos/{g}", np.array([ v_MOND, v_LCDM ]))
         
-        rad_count = math.ceil((max(r)-min(r))*100)
-        rad = np.linspace(min(r), max(r), rad_count)
+        rad = np.linspace(min(r), max(r), 100)
 
         X, X_test = r, rad
 
@@ -497,20 +452,22 @@ if __name__ == "__main__":
         gp_16percent = [ [], [], [], [] ]
         gp_84percent = [ [], [], [], [] ]
 
-        main(args, g, X, v_components, X_test)
+        ls = ls_dict[g]
+
+        main(args, ls, g, X, v_components, X_test)
 
         # Save GP fits to CSV for later use (for incorporating uncertainties/errors).
         # One array per galaxy, each containing 13 lists:
         # radii, mean (x4), 16th percentile (x4), 84th percentile (x4).
         gp_fits = np.array([rad, *gp_predictions, *gp_16percent, *gp_84percent])
         np.save("/mnt/users/koe/gp_fits/Santos-Santos/"+g, gp_fits)
-        print("\nGP results successfully saved as /mnt/users/koe/gp_fits/Santos-Santos/"+g+".npy.")
+        print("GP results successfully saved as /mnt/users/koe/gp_fits/Santos-Santos/"+g+".npy.")
     
     if not testing:
         np.save("/mnt/users/koe/gp_fits/Santos-Santos/galaxies", galaxies)
         print("\nList of analyzed galaxies now saved as /mnt/users/koe/gp_fits/Santos-Santos/galaxies.npy.")
 
-    if make_plots:
+    if make_plots and not testing:
         if do_DTW:
             """
             Plot histogram of normalized DTW costs (in ascending order of costs for data).
@@ -560,7 +517,6 @@ if __name__ == "__main__":
             # plt.xticks([])
             # plt.savefig(fileloc+"dtw/histo2.png", dpi=300, bbox_inches="tight")
             # plt.close()
-
 
         """
         Plot histogram of Spearman coefficients across RC (in ascending order of coefficients for data).
