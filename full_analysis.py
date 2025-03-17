@@ -16,22 +16,23 @@ from scipy import stats
 from utils_analysis.dtw_utils import dtw
 from utils_analysis.mock_gen import Vbar_sq_unc, MOND_unc, Vobs_scat
 from utils_analysis.extract_ft import ft_check
-# from tqdm import tqdm
+from tqdm import tqdm
 
 
 testing = False
 test_multiple = False   # Loops over the first handful of galaxies instead of just the fist one (DDO161).
 make_plots = True
-use_DTW = False
+use_DTW = True
 use_MSE = False
 do_correlations = True
 
-fileloc = "/mnt/users/koe/plots/SPARC_analysis/"
+fileloc = "/mnt/users/koe/plots/SPARC_fixedls/"
 # Options: cost wrt MOND: "dtw/"; cost wrt LCDM: "dtw/cost_vsLCDM/", original cost: "dtw/cost_vsVbar/".
 if use_DTW:
-    fname_DTW = fileloc + "dtw/cost_vsVbar/"
-    print(f"fname_DTW = {fname_DTW}")
-num_samples = 500   # No. of iterations sampling for uncertainties + errors.
+    # fname_DTW = fileloc + "dtw/cost_vsVbar/"
+    fname_DTW = fileloc + "dtw/"
+    # print(f"fname_DTW = {fname_DTW}")
+num_samples = 1000   # No. of iterations sampling for uncertainties + errors.
 
 
 # Main code to run.
@@ -74,12 +75,12 @@ def main(g, r, v_data, v_mock, num_samples=num_samples):
 
     lb, rb, widths = ft_check(res_data[1][5:], v_data[2][5:])
     if len(lb)>0:
-        print(f"Feature found in Vobs of {g}")
+        print(f"\nFeature found in Vobs of {g}")
         print(f"Properties: lb={[x+5 for x in lb]}, rb={[x+5 for x in rb]}, widths={widths}")
 
     lb, rb, widths = ft_check(res_data[0][5:], res_errors[1,0][5:])
     if len(lb)>0:
-        print(f"Feature found in Vbar of {g}")
+        print(f"\nFeature found in Vbar of {g}")
         print(f"Properties: lb={[x+5 for x in lb]}, rb={[x+5 for x in rb]}, widths={widths}")
 
 
@@ -120,20 +121,20 @@ def main(g, r, v_data, v_mock, num_samples=num_samples):
             for n in range(len(r)):
                 for m in range(len(r)):
                     # Construct distance matrix such that cost = 0 if Vobs = MOND(Vbar).
-                    if fname_DTW ==fileloc+"dtw/":
-                        dist_data[n, m] = np.abs(res_Vobs[n] - res_MOND[m][smp])
-                        dist_MOND[n, m] = np.abs(res_MOND[n][smp] - res_MOND[m][smp])
-                        dist_LCDM[n, m] = np.abs(res_LCDM[n][smp] - res_MOND[m][smp])
+                    # if fname_DTW ==fileloc+"dtw/":
+                    #     dist_data[n, m] = np.abs(res_Vobs[n] - res_MOND[m][smp])
+                    #     dist_MOND[n, m] = np.abs(res_MOND[n][smp] - res_MOND[m][smp])
+                    #     dist_LCDM[n, m] = np.abs(res_LCDM[n][smp] - res_MOND[m][smp])
 
-                    # Alternative constructions:
-                    elif fname_DTW == fileloc+"dtw/cost_vsLCDM/":
-                        dist_data[n, m] = np.abs(res_Vobs[n] - res_LCDM[m][smp])
-                        dist_MOND[n, m] = np.abs(res_MOND[n][smp] - res_LCDM[m][smp])
-                        dist_LCDM[n, m] = np.abs(res_LCDM[n][smp] - res_LCDM[m][smp])
-                    else:
-                        dist_data[n, m] = np.abs(res_Vobs[n] - res_Vbar_mock[m][smp])
-                        dist_MOND[n, m] = np.abs(res_MOND[n][smp] - res_Vbar_mock[m][smp])
-                        dist_LCDM[n, m] = np.abs(res_LCDM[n][smp] - res_Vbar_mock[m][smp])
+                    # # Alternative constructions:
+                    # elif fname_DTW == fileloc+"dtw/cost_vsLCDM/":
+                    #     dist_data[n, m] = np.abs(res_Vobs[n] - res_LCDM[m][smp])
+                    #     dist_MOND[n, m] = np.abs(res_MOND[n][smp] - res_LCDM[m][smp])
+                    #     dist_LCDM[n, m] = np.abs(res_LCDM[n][smp] - res_LCDM[m][smp])
+                    # else:
+                    dist_data[n, m] = np.abs(res_Vobs[n] - res_Vbar_data[m])
+                    dist_MOND[n, m] = np.abs(res_MOND[n][smp] - res_Vbar_data[m])
+                    dist_LCDM[n, m] = np.abs(res_LCDM[n][smp] - res_Vbar_data[m])
             
             dist_mats = np.array([ dist_data, dist_MOND, dist_LCDM ])
             mats_dir = [ "data/", "MOND/", "LCDM/" ]
@@ -167,26 +168,26 @@ def main(g, r, v_data, v_mock, num_samples=num_samples):
                     plt.title("DTW alignment: "+g)
 
                     # Settings for visualizing different DTW constructions.
-                    if fname_DTW == fileloc+"dtw/":
-                        ref_curve = [ res_MOND, "mediumblue", "MOND" ]
-                    elif fname_DTW == fileloc+"dtw/cost_vsLCDM/":
-                        ref_curve = [ res_LCDM, "tab:green", r"$\Lambda$CDM" ]
-                    else:
-                        ref_curve = [ res_Vbar_mock, "tab:red", "Vbar" ]
+                    # if fname_DTW == fileloc+"dtw/":
+                    #     ref_curve = [ res_MOND, "mediumblue", "MOND" ]
+                    # elif fname_DTW == fileloc+"dtw/cost_vsLCDM/":
+                    #     ref_curve = [ res_LCDM, "tab:green", r"$\Lambda$CDM" ]
+                    # else:
+                    ref_curve = [ res_Vbar_data, "tab:red", "Vbar" ]
 
                     if j == 0:
-                        diff = abs(max(np.array(ref_curve[0])[:,smp]) - min(res_Vobs))
+                        diff = abs(max(np.array(ref_curve[0])) - min(res_Vobs))
                         for x_i, y_j in path:
-                            plt.plot([x_i, y_j], [res_Vobs[x_i] + diff, ref_curve[0][y_j][smp] - diff], c="C7", alpha=0.4)
+                            plt.plot([x_i, y_j], [res_Vobs[x_i] + diff, ref_curve[0][y_j] - diff], c="C7", alpha=0.4)
                         plt.plot(np.arange(len(r)), np.array(res_Vobs) + diff, c='k', label=v_comps[3])
 
                     else: 
-                        diff = abs(max(np.array(ref_curve[0])[:,smp]) - min(np.array(res_mock)[j,:,smp]))
+                        diff = abs(max(np.array(ref_curve[0])) - min(np.array(res_mock)[j,:,smp]))
                         for x_i, y_j in path:
-                            plt.plot([x_i, y_j], [res_mock[j][x_i][smp] + diff, ref_curve[0][y_j][smp] - diff], c="C7", alpha=0.4)
+                            plt.plot([x_i, y_j], [res_mock[j][x_i][smp] + diff, ref_curve[0][y_j] - diff], c="C7", alpha=0.4)
                         plt.plot(np.arange(len(r)), np.array(res_mock)[j,:,smp] + diff, c=colours[j], label=v_comps[j])
 
-                    plt.plot(np.arange(len(r)), np.array(ref_curve[0])[:,smp] - diff, c=ref_curve[1], label=ref_curve[2])
+                    plt.plot(np.arange(len(r)), np.array(ref_curve[0]) - diff, c=ref_curve[1], label=ref_curve[2])
                     plt.plot([], [], c='w', label="Alignment cost = {:.4f}".format(cost))
                     plt.plot([], [], c='w', label="Normalized cost = {:.4f}".format(cost/(len(r)*2)))
 
@@ -201,7 +202,7 @@ def main(g, r, v_data, v_mock, num_samples=num_samples):
 
 
     """
-    Code for PCHIP on GP residuals.
+    Code for calculating correlation coefficients on GP residuals.
     """
     if do_correlations:
 
@@ -260,7 +261,7 @@ def main(g, r, v_data, v_mock, num_samples=num_samples):
                 # for k in range(3):
                 for j in range(3, len(r)+1):
                     # rcorr_mock_d0[0].append(stats.spearmanr(res_mock[0,:j,smp], res_mock[i,:j,smp])[0])
-                    pearsonr_mock.append(stats.pearsonr(res_mock[0,:j,smp], res_mock[i,:j,smp])[0])
+                    pearsonr_mock.append(stats.pearsonr(res_Vbar_data[:j], res_mock[i,:j,smp])[0])
                 correlations_r.append(pearsonr_mock)
             
             radii_corr.append(correlations_r)
@@ -275,9 +276,9 @@ def main(g, r, v_data, v_mock, num_samples=num_samples):
         Plot GP fits, residuals and correlations.
         """
         if make_plots:
-            subdir = "correlations/radii/"
+            # subdir = "correlations/radii/"
             # color_bar = "orange"
-            deriv_dir = [ "d0/", "d1/", "d2/" ]
+            # deriv_dir = [ "d0/", "d1/", "d2/" ]
             c_temp = [ 'tab:red', 'mediumblue', 'tab:green' ]
             labels_temp = [ "Vbar (SPARC)", "Vobs (MOND)", r"Vobs ($\Lambda$CDM)", "Vobs (SPARC)" ]
 
@@ -358,72 +359,72 @@ def main(g, r, v_data, v_mock, num_samples=num_samples):
             #     plt.close()
 
             """Pearson correlations."""
-            for der in range(1):
-                fig1, (ax0, ax1, ax2) = plt.subplots(3, 1, sharex=True, gridspec_kw={'height_ratios': [5, 2, 3]})
-                fig1.set_size_inches(7, 7)
-                ax0.set_title("Residuals correlation: "+g)
-                ax0.set_ylabel("Velocities (km/s)")
+            # for der in range(1):
+            fig1, (ax0, ax1, ax2) = plt.subplots(3, 1, sharex=True, gridspec_kw={'height_ratios': [5, 2, 3]})
+            fig1.set_size_inches(7, 7)
+            ax0.set_title("Residuals correlation: "+g)
+            ax0.set_ylabel("Velocities (km/s)")
+            
+            for j in range(4):
+                if j == 3:
+                    ax0.errorbar(r, v_data[1], data["errV"], color='k', alpha=0.3, fmt='o', capsize=2)
+                else:
+                    ax0.errorbar(r, raw_median[j], raw_errors[:, j], c=c_temp[j], alpha=0.3, fmt='o', capsize=2)
+                # Plot mean prediction from GP.
+                ax0.plot(rad, mean_prediction[j], color=colours[j], label=labels_temp[j])
+                # Fill in 1-sigma (68%) confidence band of GP fit.
+                ax0.fill_between(rad, lower_percentile[j], upper_percentile[j], color=colours[j], alpha=0.2)
+
+            ax0.legend(bbox_to_anchor=(1, 1), loc="upper left")
+            ax0.grid()
+
+            ax1.set_ylabel("Residuals (km/s)")
+            for j in range(4):
+                # Plots for mock Vobs + Vbar (sampled w/ uncertainties).
+                if j == 3:
+                    # if der == 0:
+                    ax1.errorbar(r[5:], res_data[1][5:], v_data[2][5:], color='k', alpha=0.3, ls='none', fmt='o', capsize=2)
+                    ax1.plot(r[5:], res_data[1][5:], color='k', label=labels_temp[j])
+                else:
+                    # if der == 0:
+                    ax1.scatter(r[5:], res_median[j][5:], c=c_temp[j], alpha=0.3)
+                    # ax1.errorbar(r, res_median[j], res_errors[:, j], color=colours[j], alpha=0.3, ls='none', fmt='o', capsize=2)
+                    ax1.plot(r[5:], res_mock_percentiles[1][j][5:], c=c_temp[j], label=labels_temp[j])
+                    ax1.fill_between(r[5:], res_mock_percentiles[0][j][5:], res_mock_percentiles[2][j][5:], color=c_temp[j], alpha=0.15)
+
+            ax1.grid()
+
+            ax2.set_xlabel("Radii (kpc)")
+            ax2.set_ylabel("Correlations w/ Vbar")
+            
+            vel_comps = [ "MOND", r"$\Lambda$CDM", "Data" ]
+
+            for j in range(2):
+                # mean_spearmanr = 0.
+                # mean_pearsonr = 0.
+
+                ax2.plot(r[2:], rcorr_percentiles[1][j], c=c_temp[j+1], label=vel_comps[j]+r": Pearson $\rho$")
+                ax2.fill_between(r[2:], rcorr_percentiles[0][j], rcorr_percentiles[2][j], color=colours[j+1], alpha=0.2)
                 
-                for j in range(4):
-                    if j == 3:
-                        ax0.errorbar(r, v_data[1], data["errV"], color='k', alpha=0.3, fmt='o', capsize=2)
-                    else:
-                        ax0.errorbar(r, raw_median[j], raw_errors[:, j], c=c_temp[j], alpha=0.3, fmt='o', capsize=2)
-                    # Plot mean prediction from GP.
-                    ax0.plot(rad, mean_prediction[j], color=colours[j], label=labels_temp[j])
-                    # Fill in 1-sigma (68%) confidence band of GP fit.
-                    ax0.fill_between(rad, lower_percentile[j], upper_percentile[j], color=colours[j], alpha=0.2)
+                # for smp in range(len(radii_corr)):
+                    # mean_spearmanr += stats.spearmanr(radii_corr[smp][j][der][0], bar_ratio[10:])[0] / len(radii_corr)
+                    # mean_pearsonr += stats.pearsonr(radii_corr[smp][j][der][1], bar_ratio[10:])[0] / len(radii_corr)
+                # ax2.plot([], [], ' ', label=r"$\rho_p=$"+str(round(mean_pearsonr, 3)))
 
-                ax0.legend(bbox_to_anchor=(1, 1), loc="upper left")
-                ax0.grid()
+            ax2.plot(r[2:], pearsonr_data, c='k', label=r"Data: Pearson $\rho$")
+            ax2.plot([], [], ' ', label=r"$\rho_p=$"+str(round(np.nanmean(pearsonr_data), 3)))
 
-                ax1.set_ylabel("Residuals (km/s)")
-                for j in range(4):
-                    # Plots for mock Vobs + Vbar (sampled w/ uncertainties).
-                    if j == 3:
-                        # if der == 0:
-                        ax1.errorbar(r[5:], res_data[1][5:], v_data[2][5:], color='k', alpha=0.3, ls='none', fmt='o', capsize=2)
-                        ax1.plot(r[5:], res_data[1][5:], color='k', label=labels_temp[j])
-                    else:
-                        # if der == 0:
-                        ax1.scatter(r[5:], res_median[j][5:], c=c_temp[j], alpha=0.3)
-                        # ax1.errorbar(r, res_median[j], res_errors[:, j], color=colours[j], alpha=0.3, ls='none', fmt='o', capsize=2)
-                        ax1.plot(r[5:], res_mock_percentiles[1][j][5:], c=c_temp[j], label=labels_temp[j])
-                        ax1.fill_between(r[5:], res_mock_percentiles[0][j][5:], res_mock_percentiles[2][j][5:], color=c_temp[j], alpha=0.15)
+            # ax5 = ax2.twinx()
+            # ax5.set_ylabel(r'Average $v_{bar}/v_{obs}$')
+            # ax5.plot(rad[10:], bar_ratio[10:], '--', color=color_bar, label="Vbar/Vobs")
+            # ax5.tick_params(axis='y', labelcolor=color_bar)
+            
+            # ax2.legend(bbox_to_anchor=(1.64, 1.3))
+            ax2.grid()
 
-                ax1.grid()
-
-                ax2.set_xlabel("Radii (kpc)")
-                ax2.set_ylabel("Correlations w/ Vbar")
-                
-                vel_comps = [ "MOND", r"$\Lambda$CDM", "Data" ]
-
-                for j in range(2):
-                    # mean_spearmanr = 0.
-                    # mean_pearsonr = 0.
-
-                    ax2.plot(r[2:], rcorr_percentiles[1][j], c=c_temp[j+1], label=vel_comps[j]+r": Pearson $\rho$")
-                    ax2.fill_between(r[2:], rcorr_percentiles[0][j], rcorr_percentiles[2][j], color=colours[j+1], alpha=0.2)
-                    
-                    # for smp in range(len(radii_corr)):
-                        # mean_spearmanr += stats.spearmanr(radii_corr[smp][j][der][0], bar_ratio[10:])[0] / len(radii_corr)
-                        # mean_pearsonr += stats.pearsonr(radii_corr[smp][j][der][1], bar_ratio[10:])[0] / len(radii_corr)
-                    # ax2.plot([], [], ' ', label=r"$\rho_p=$"+str(round(mean_pearsonr, 3)))
-
-                ax2.plot(r[2:], pearsonr_data, c='k', label=r"Data: Pearson $\rho$")
-                ax2.plot([], [], ' ', label=r"$\rho_p=$"+str(round(np.nanmean(pearsonr_data), 3)))
-
-                # ax5 = ax2.twinx()
-                # ax5.set_ylabel(r'Average $v_{bar}/v_{obs}$')
-                # ax5.plot(rad[10:], bar_ratio[10:], '--', color=color_bar, label="Vbar/Vobs")
-                # ax5.tick_params(axis='y', labelcolor=color_bar)
-                
-                # ax2.legend(bbox_to_anchor=(1.64, 1.3))
-                ax2.grid()
-
-                plt.subplots_adjust(hspace=0.05)
-                fig1.savefig(fileloc+subdir+"pearson/"+deriv_dir[der]+g+".png", dpi=300, bbox_inches="tight")
-                plt.close()
+            plt.subplots_adjust(hspace=0.05)
+            fig1.savefig(fileloc+"correlations/"+g+".png", dpi=300, bbox_inches="tight")
+            plt.close()
     
     # print("\nMemory usage: %s (kb)" %getrusage(RUSAGE_SELF).ru_maxrss)
     jax.clear_caches()    # One-line attempt to solve the JIT memory allocation problem.
@@ -619,7 +620,7 @@ if __name__ == "__main__":
         else:
             xbulge_count += 1
 
-        print("\nAnalyzing galaxy "+g+" ("+str(i+1)+"/60)")
+        # print("\nAnalyzing galaxy "+g+" ("+str(i+1)+"/60)")
         main(g, r, v_data, v_mock)
 
     print("Max memory usage: %s (kb)" %getrusage(RUSAGE_SELF).ru_maxrss)
@@ -678,21 +679,21 @@ if __name__ == "__main__":
             print(f"Galaxies in ascending order of cost(data): {np.array(galaxies)[sort_args]}")
 
             # Plot histogram of normalized DTW alignment costs of all galaxies.
-            if fname_DTW == fileloc+"dtw/cost_vsLCDM/": plt.title(r"Normalized DTW alignment costs (relative to $\Lambda$CDM)")
-            elif fname_DTW == fileloc+"dtw/cost_vsVbar/": plt.title("Normalized DTW alignment costs (relative to Vbar)")
-            else: plt.title("Normalized DTW alignment costs (relative to MOND)")
+            # if fname_DTW == fileloc+"dtw/cost_vsLCDM/": plt.title(r"Normalized DTW alignment costs (relative to $\Lambda$CDM)")
+            # elif fname_DTW == fileloc+"dtw/cost_vsVbar/": plt.title("Normalized DTW alignment costs (relative to Vbar)")
+            # else: plt.title("Normalized DTW alignment costs (relative to MOND)")
 
             hist_labels = [ "Data", "MOND", r"$\Lambda$CDM" ]
             colours = [ 'k', 'mediumblue', 'tab:green' ]
 
-            if fname_DTW == fileloc+"dtw/cost_vsVbar/":
-                plt.bar(galaxies, norm_percentiles[2][0], color=colours[0], alpha=0.3, label=hist_labels[0])
+            # if fname_DTW == fileloc+"dtw/cost_vsVbar/":
+            plt.bar(galaxies, norm_percentiles[2][0], color=colours[0], alpha=0.3, label=hist_labels[0])
 
             for j in range(3):
-                if fname_DTW == fileloc+"dtw/":
-                    if j == 1: continue     # Only plot values for data and LCDM since cost(MOND) == 0.
-                elif fname_DTW == fileloc+"dtw/cost_vsLCDM/":
-                    if j == 2: continue     # Only plot values for data and MOND since cost(LCDM) == 0.
+                # if fname_DTW == fileloc+"dtw/":
+                #     if j == 1: continue     # Only plot values for data and LCDM since cost(MOND) == 0.
+                # elif fname_DTW == fileloc+"dtw/cost_vsLCDM/":
+                #     if j == 2: continue     # Only plot values for data and MOND since cost(LCDM) == 0.
                 mean_norm = np.nanmean(norm_percentiles[2][j])
                 low_err = norm_percentiles[2][j] - norm_percentiles[1][j]
                 up_err = norm_percentiles[3][j] - norm_percentiles[2][j]
@@ -706,7 +707,8 @@ if __name__ == "__main__":
                     # plt.fill_between(galaxies, low_norm2, up_norm2, color=colours[j], alpha=0.1)
 
                 plt.axhline(y=mean_norm, color=colours[j], linestyle='dashed', label="Mean = {:.4f}".format(mean_norm))
-                if not(fname_DTW == fileloc+"dtw/cost_vsVbar/" and j == 0):
+                # if not(fname_DTW == fileloc+"dtw/cost_vsVbar/" and j == 0):
+                if j != 0:
                     plt.errorbar(galaxies, norm_percentiles[2][j], [low_err, up_err], fmt='.', ls='none',
                                 capsize=2, color=colours[j], alpha=0.5, label=hist_labels[j])
                             
@@ -835,7 +837,7 @@ if __name__ == "__main__":
             
             plt.legend()
             plt.xticks([])
-            plt.savefig(fileloc+"correlations/radii/pearson/histo1.png", dpi=300, bbox_inches="tight")
+            plt.savefig(fileloc+"correlations/histo1.png", dpi=300, bbox_inches="tight")
             plt.close()
 
     print("Max memory usage: %s (kb)" %getrusage(RUSAGE_SELF).ru_maxrss)
