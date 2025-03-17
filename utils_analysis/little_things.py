@@ -22,7 +22,8 @@ def get_things():
     
     radii, Vobs_ALL, errV_ALL = [], [], []
     
-    for i in tqdm(range(18)):
+    for i in range(18):
+    # for i in tqdm(range(18)):
         g = galaxies[i]
         data_loc = f"/mnt/users/koe/data/little_things/{g}_onlinetab.txt"
 
@@ -42,50 +43,55 @@ def get_things():
     return galaxies, radii, Vobs_ALL, errV_ALL
 
 
-def get_things_res( make_plots:bool=False ):
+def get_things_res( make_plots:bool=False, res_fits:bool=False ):
     galaxies, radii, Vobs_ALL, errV_ALL = get_things()
     
-    # Initialize args for GP and sampling rate.
-    assert numpyro.__version__.startswith("0.15.0")
-    numpyro.enable_x64()    # To keep the inference from getting constant samples.
-    parser = argparse.ArgumentParser(description="Gaussian Process")
-    parser.add_argument("-n", "--num-samples", nargs="?", default=1000, type=int)
-    parser.add_argument("--num-warmup", nargs="?", default=1000, type=int)
-    parser.add_argument("--num-chains", nargs="?", default=1, type=int)
-    parser.add_argument("--thinning", nargs="?", default=2, type=int)
-    parser.add_argument("--num-data", nargs="?", default=25, type=int)
-    parser.add_argument("--device", default="cpu", type=str, help='use "cpu" or "gpu".')
-    parser.add_argument(
-        "--init-strategy",
-        default="median",
-        type=str,
-        choices=["median", "feasible", "uniform", "sample"],
-    )
-    parser.add_argument("--no-cholesky", dest="use_cholesky", action="store_false")
-    parser.add_argument("--testing", default=False, type=bool)
-    args = parser.parse_args()
+    if res_fits:
+        # Initialize args for GP and sampling rate.
+        assert numpyro.__version__.startswith("0.15.0")
+        numpyro.enable_x64()    # To keep the inference from getting constant samples.
+        parser = argparse.ArgumentParser(description="Gaussian Process")
+        parser.add_argument("-n", "--num-samples", nargs="?", default=1000, type=int)
+        parser.add_argument("--num-warmup", nargs="?", default=1000, type=int)
+        parser.add_argument("--num-chains", nargs="?", default=1, type=int)
+        parser.add_argument("--thinning", nargs="?", default=2, type=int)
+        parser.add_argument("--num-data", nargs="?", default=25, type=int)
+        parser.add_argument("--device", default="cpu", type=str, help='use "cpu" or "gpu".')
+        parser.add_argument(
+            "--init-strategy",
+            default="median",
+            type=str,
+            choices=["median", "feasible", "uniform", "sample"],
+        )
+        parser.add_argument("--no-cholesky", dest="use_cholesky", action="store_false")
+        parser.add_argument("--testing", default=False, type=bool)
+        args = parser.parse_args()
 
-    numpyro.set_platform(args.device)
-    numpyro.set_host_device_count(args.num_chains)
+        numpyro.set_platform(args.device)
+        numpyro.set_host_device_count(args.num_chains)
 
-    radii, errors, residuals = [], [], []
+    residuals = []
 
-    for i in tqdm(range(18)):
-        # Get THINGS data from get_things().
-        galaxies, radii, Vobs_ALL, errV_ALL = get_things()
+    for i in range(18):
+    # for i in tqdm(range(18)):
         g = galaxies[i]
         r = radii[i]
         Vobs = Vobs_ALL[i]
         errV = errV_ALL[i]
 
         rad = np.linspace(0., max(r), 100)
-        pred_mean, pred_band = GP_fit( args, r, [Vobs, Vobs], rad, summary=False )
 
-        # Compute residuals of fits.
-        res_Vobs = []
-        for k in range(len(r)):
-            idx = (np.abs(rad - r[k])).argmin()
-            res_Vobs.append(Vobs[k] - pred_mean[0][idx])
+        if res_fits:
+            pred_mean, pred_band = GP_fit( args, r, [Vobs, Vobs], rad, summary=False )
+
+            # Compute residuals of fits.
+            res_Vobs = []
+            for k in range(len(r)):
+                idx = (np.abs(rad - r[k])).argmin()
+                res_Vobs.append(Vobs[k] - pred_mean[0][idx])
+            np.save(f"/mnt/users/koe/gp_fits/little_things/{g}_residuals.npy", res_Vobs)
+        else:
+            res_Vobs = np.load(f"/mnt/users/koe/gp_fits/little_things/{g}_residuals.npy")
 
         residuals.append(res_Vobs)
 
@@ -117,5 +123,5 @@ def get_things_res( make_plots:bool=False ):
             fig1.savefig(file_name, dpi=300, bbox_inches="tight")
             plt.close()
         
-    return galaxies, radii, errors, residuals
+    return galaxies, radii, errV_ALL, residuals
 

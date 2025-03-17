@@ -28,7 +28,7 @@ def kernel(X, Z, var, length, noise, jitter=1.0e-6, include_noise=True):
     return k
 
 
-def model(X, Y, vr=0, ls=0, ns=0):
+def model(X, Y, vr=0, ls=0, ns=0, min_length:float=0.5):
     # set uninformative log-normal priors on our three kernel hyperparameters
     if vr == 0:
         var = numpyro.sample("var", dist.LogNormal(0.0, 1.0))
@@ -36,7 +36,9 @@ def model(X, Y, vr=0, ls=0, ns=0):
         var = vr
 
     if ls == 0:
-        length = numpyro.sample("length", dist.Uniform(max(X)/2., max(X)))
+        length = numpyro.sample("length", dist.Uniform(max(X) * min_length, max(X)))
+        # length = numpyro.sample("length", dist.Uniform(0.0, max(X)))
+        # length = numpyro.sample("length", dist.Normal(0.5 * max(X), 0.1 * max(X)))
     else:
         length = ls
     
@@ -56,7 +58,7 @@ def model(X, Y, vr=0, ls=0, ns=0):
 
 
 # helper function for doing hmc inference
-def run_inference(model, args, rng_key, X, Y, vr=0, ls=0, ns=0, summary:bool=True):
+def run_inference(model, args, rng_key, X, Y, vr=0, ls=0, ns=0, min_length:float=0.5, summary:bool=True):
     start = time.time()
     # demonstrate how to use different HMC initialization strategies
     if args.init_strategy == "median":
@@ -76,7 +78,7 @@ def run_inference(model, args, rng_key, X, Y, vr=0, ls=0, ns=0, summary:bool=Tru
         thinning=args.thinning,
         progress_bar=args.testing,
     )
-    mcmc.run(rng_key, X, Y, vr, ls, ns)
+    mcmc.run(rng_key, X, Y, vr, ls, ns, min_length)
     if (vr, ls, ns) == (0, 0, 0) and summary:
         mcmc.print_summary()
         print("\nMCMC elapsed time:", time.time() - start)

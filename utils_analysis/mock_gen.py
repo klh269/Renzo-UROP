@@ -19,13 +19,23 @@ def Vbar_sq_unc(table, i_table, data, bulged=False, num_samples=num_samples):
     dist_pgas = np.random.normal(1., 0.04, size=num_samples)
     dist_pbul = np.random.normal(pbul, 0.175, size=num_samples)
 
+    # # Sample inclination (remember to convert from degrees to radians!).
+    # inc_mean, inc_err = table["Inc"][i_table]*np.pi/180, table["e_Inc"][i_table]*np.pi/180
+    # inc_min, inc_max = 0.0, 150 * np.pi / 180
+    # inc = stats.truncnorm.rvs( (inc_min-inc_mean) / inc_err, (inc_max-inc_mean) / inc_err, loc=inc_mean, scale=inc_err, size=num_samples )
+    # inc_scaling = np.sin(inc_mean) / np.sin(inc)
+
+    # # Scale Vobs and errV according to sampled inclication.
+    # Vobs = np.array(data["Vobs"]) * inc_scaling
+    # e_Vobs = np.array(data["errV"]) * inc_scaling
+
     # Sample luminosity
-    L36 = stats.truncnorm.rvs(-table["L"][i_table] / table["e_L"][i_table], np.inf, table["L"][i_table], table["e_L"][i_table], size=num_samples)
+    L36 = stats.truncnorm.rvs(-table["L"][i_table] / table["e_L"][i_table], np.inf, loc=table["L"][i_table], scale=table["e_L"][i_table], size=num_samples)
     dist_pdisk *= L36 / table["L"][i_table]
     dist_pbul *= L36 / table["L"][i_table]
 
     # Sample distance to the galaxy
-    galdist = stats.truncnorm.rvs(-table["D"][i_table] / table["e_D"][i_table], np.inf, table["D"][i_table], table["e_D"][i_table], size=num_samples)
+    galdist = stats.truncnorm.rvs(-table["D"][i_table] / table["e_D"][i_table], np.inf, loc=table["D"][i_table], scale=table["e_D"][i_table], size=num_samples)
     dist_scale = galdist / table["D"][i_table]
     dist_scaling = np.full((len(data["Vdisk"]), num_samples), dist_scale)
 
@@ -48,9 +58,9 @@ def MOND_unc(r, Vbar2_unc, num_samples=num_samples):
     r_unc = np.array([r] * num_samples).T
     acc = Vbar2_unc / r_unc
     y = acc / a0
-    nu = 1 + np.sqrt((1 + 4/y))
-    nu /= 2
-    return np.sqrt(acc * nu * r_unc)
+    mu = 1 + np.sqrt((1 + 4/y))
+    mu /= 2
+    return np.sqrt(acc * mu * r_unc)
 
 # Scatter a Vobs array with Gaussian noise of width data["errV"].
 def Vobs_scat(Vobs, errV, num_samples=num_samples):
@@ -65,10 +75,10 @@ def Vobs_scat_corr(Vobs, errV, num_samples=num_samples):
     return np.random.normal(Vobs, errV_copies)
 
 
-# Fit LCDM mock data (NFW halo profile) to Vobs array.
+# Fit LCDM (NFW) or MOND mock data to Vobs array.
 def Vobs_MCMC(table, i_table, data, bulged, profile):
     nuts_kernel = NUTS(Vobs_fit, init_strategy=init_to_median(num_samples=num_samples))
-    mcmc = MCMC(nuts_kernel, num_warmup=10000, num_samples=20000, progress_bar=True)
+    mcmc = MCMC(nuts_kernel, num_warmup=10000, num_samples=20000, progress_bar=False)
     mcmc.run(random.PRNGKey(0), table, i_table, data, bulged, profile=profile)
     mcmc.print_summary()
     samples = mcmc.get_samples()

@@ -52,10 +52,12 @@ def dtw(dist_mat):
 
 
 def do_DTW(itr:int, length:int, arr1, arr2, window:bool, make_plots=False, file_names=""):
-    # arr1 and arr2 are 2D array-like objects of size (iterations x length);
-    # arr2 should be residuals from MOND fit on Vbar as we defined it to have cost = 0;
-    # this function is to be called within a loop over said iterations.
-    # file_names should be a list of strings in the order: [ matrix, alignment ].
+    """
+    arr1 and arr2 are 2D array-like objects of size (iterations x length);
+    arr2 should be residuals from MOND(Vbar) as we defined it to have cost = 0;
+    this function is to be called within a loop over said iterations.
+    file_names should be a list of strings in the order: [ matrix, alignment ].
+    """
     dist_mat_fwd = np.zeros((length, length))
     dist_mat_rev = np.zeros((length, length))
     if window:
@@ -105,13 +107,13 @@ def do_DTW(itr:int, length:int, arr1, arr2, window:bool, make_plots=False, file_
         if window:
             for x_i, y_j in path_fwd:
                 plt.plot([x_i, y_j], [arr1[itr][44+x_i] + diff, arr2[itr][44+y_j] - diff], c="C7", alpha=0.4)
-            plt.plot(np.arange(length), np.array(arr1[itr][44:55]) + diff, c='darkblue', label="Vobs")
-            plt.plot(np.arange(length), np.array(arr2[itr][44:55]) - diff, c="red", label="Vbar")
+            plt.plot(np.arange(length), np.array(arr1[itr][44:55]) + diff, c='k', label="Vobs")
+            plt.plot(np.arange(length), np.array(arr2[itr][44:55]) - diff, c="mediumblue", label="MOND")
         else:
             for x_i, y_j in path_fwd:
                 plt.plot([x_i, y_j], [arr1[itr][x_i] + diff, arr2[itr][y_j] - diff], c="C7", alpha=0.4)
             plt.plot(np.arange(length), arr1[itr] + diff, c='k', label="Vobs")
-            plt.plot(np.arange(length), arr2[itr] - diff, c="red", label="Vbar")
+            plt.plot(np.arange(length), arr2[itr] - diff, c="mediumblue", label="MOND")
 
         plt.plot([], [], c='w', label="Alignment cost = {:.4f}".format(cost))
         plt.plot([], [], c='w', label="Normalized cost = {:.4f}".format(norm_cost))
