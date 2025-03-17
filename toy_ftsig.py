@@ -15,12 +15,12 @@ from utils_analysis.little_things import get_things
 Define functions.
 """
 #  Determine the file location for array extraction
-def fileloc(bump_FWHM:float, use_MF:bool, use_GP:bool):
-    loc = f"/mnt/users/koe/plots/toy_model/2Dsig/FWHM={bump_FWHM}/"
-    if use_MF and use_GP: raise Exception("GP and MF cannot both be True!")
-    elif use_MF: loc += "use_MF/"
-    elif use_GP: loc += "use_GP/"
-    return loc
+# def fileloc(bump_FWHM:float, use_MF:bool, use_GP:bool):
+#     loc = f"/mnt/users/koe/plots/toy_model/2Dsig/FWHM={bump_FWHM}/"
+#     if use_MF and use_GP: raise Exception("GP and MF cannot both be True!")
+#     elif use_MF: loc += "use_MF/"
+#     elif use_GP: loc += "use_GP/"
+#     return loc
 
 def get_SPARC(ft_height:float = 0.1):
     # Get galaxy data from table1.
@@ -63,18 +63,25 @@ def get_SPARC(ft_height:float = 0.1):
 MAIN CODE.
 """
 # Analysis switches.
-use_MF = True
-use_GP = False
+# use_MF = False
+# use_GP = not use_MF
 use_THINGS = False
 use_SPARC = False
 
-bump_FWHM = 5.0
-fname = fileloc(bump_FWHM, use_MF, use_GP)
+# bump_FWHM = 15.0
+# fname = fileloc(bump_FWHM, use_MF, use_GP)
+bump_width = 0.2
+fname = f"/mnt/users/koe/plots/mock_data/width={bump_width}/"
 
 # Array of sampling rates and noise.
-height_arr = np.linspace(2.0, 100.0, 49, endpoint=True) if use_GP else np.linspace(2.0, 100.0, 99, endpoint=True)
-noise_arr = 10.0 / np.flip(height_arr)
+# height_arr = np.linspace(2.0, 100.0, 49, endpoint=True) if use_GP else np.linspace(2.0, 100.0, 99, endpoint=True)
+height_arr = np.linspace(20.0, 2.0, 37, endpoint=True)
+noise_arr = 20.0 / np.flip(height_arr)
 samp_rates = np.linspace(10, 300, 30, endpoint=True, dtype=int)
+
+# Truncate arrays s.t. SnR only goes up to 20.
+# max_idx = np.where( height_arr <= 20.0 )[0][-1]
+# height_arr = height_arr[:max_idx]
 
 # # Get numbers from SPARC dataset.
 # SPARC_ft = 0.2
@@ -95,22 +102,24 @@ for sn in range(2):
     
     ft_significance = np.fliplr(ft_significance)
     ft_significance = np.nan_to_num(ft_significance, nan=np.inf, posinf=np.inf)
-    ft_significance = gaussian_filter(ft_significance, 0.8)
-    ft_significance = np.clip( ft_significance, 1.0, 10.0 )
+    ft_significance = gaussian_filter(ft_significance, 1.0)
+    # ft_significance = np.clip( ft_significance, 1.0, 6.0 )
+    # ft_significance = ft_significance[:,:max_idx]
 
+    # if sn == 1 and use_GP: height_arr = height_arr[:-1]
     extent = [ min(height_arr), max(height_arr), min(samp_rates)/10.0, max(samp_rates)/10.0 ]
     
-    plt.title(f"Feature significance: {titles[sn]} (ft width = {bump_FWHM/10})")
+    # plt.title(f"Feature significance: {titles[sn]} (ft width = {bump_FWHM/10})")
     plt.imshow( ft_significance, interpolation='none', norm='linear', cmap='viridis',
                 origin='lower', extent=extent, aspect='auto' )
     plt.xlabel("Feature / noise ratio")
     plt.ylabel("Sampling rate (# samples / ft FWHM)")
     plt.colorbar()
 
-    yticks = np.array([5, 10, 15, 20, 25, 30])
-    plt.yticks(ticks=yticks, labels=yticks*bump_FWHM/10)
+    # yticks = np.array([5, 10, 15, 20, 25, 30])
+    # plt.yticks(ticks=yticks, labels=yticks*bump_FWHM/10)
 
-    contours = plt.contour( height_arr, samp_rates/10.0, ft_significance, 9,
+    contours = plt.contour( height_arr[::-1], samp_rates/10.0, ft_significance,
                             origin='lower', extent=extent, colors='black' )
     plt.clabel(contours, inline=1, fontsize=10)
     # plt.scatter(np.array(SPARC_noise), SPARC_rates, color='red', label="SPARC galaxies (assuming ft height = 0.1)")
@@ -118,8 +127,13 @@ for sn in range(2):
     #     if SPARC_noise[pt] < 0.2:
     #         plt.annotate(gal_list[pt], (SPARC_noise[pt], SPARC_rates[pt] + 0.2), color='red')
 
-    # plt.legend(loc='upper right')
-    plt.xscale("log")
+    # plt.scatter([4.84539013], [5], color='red', label="NGC 1560 (Sanders)")
+    # plt.annotate(r"$v_{obs}$", (4.24539013, 5.7), color='red')
+    plt.scatter([3.16058723], [5], marker="*", color='red', label="NGC 1560 (Sanders)")
+    # plt.annotate(r"$v_{bar}$", (2.56058723, 5.7), color='red')
+
+    plt.legend(loc='upper right')
+    # plt.xscale("log")
     plt.savefig(f"{fname}{signames[sn]}.png")
     plt.close()
 
