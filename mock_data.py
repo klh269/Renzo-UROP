@@ -4,10 +4,14 @@
 Generate toy models of galaxy RC using arctan curves + gaussian features,
 then apply same analysis of correlation coefficients + DTW on residuals
 to better understand the effect/restriction of sampling rates, feature sizes and uncertainties.
+
+To run this as a for-loop in bash:
+for i in {0..29}; do addqueue -q cmb -c "1-3 days" -n 1 -m 8 mock_data.py --ft-width 0.2 --samp-idx $i; done
 """
 import numpy as np
-from scipy import interpolate
+from math import floor, ceil
 import matplotlib
+import matplotlib.pyplot as plt
 
 import jax
 import numpyro
@@ -15,9 +19,9 @@ import argparse
 from resource import getrusage, RUSAGE_SELF
 # from tqdm import tqdm
 
-from utils_analysis.toy_gen import toy_gen
-from utils_analysis.med_filter import med_filter
-from utils_analysis.toy_GP import GP_fit, GP_residuals
+from utils_analysis.toy_gen import toy_gen, toy_scatter
+# from utils_analysis.med_filter import med_filter
+from utils_analysis.toy_GP import GP_fit, get_residuals
 from utils_analysis.dtw_utils import do_DTW
 from utils_analysis.correlations import corr_radii
 
@@ -62,20 +66,18 @@ def set_args( use_GP:bool=False ):
         numpyro.set_host_device_count(args.num_chains)
 
     else:
-        parser = argparse.ArgumentParser(description="Toy Model")
+        parser = argparse.ArgumentParser(description="Mock Data")
         parser.add_argument("--ft-width", default=10, type=float)
         parser.add_argument("--samp-idx", type=int)
         args = parser.parse_args()
     
     return args
 
-def get_fname( file_FWHM:float, use_GP:bool=False ):
+def get_fname( width:float ):
     """Get file name for saving plots and arrays"""
-    fname = f"/mnt/users/koe/plots/toy_model/2Dsig/FWHM={file_FWHM}/"
-    if use_GP: fname += "use_GP/"
-    else:      fname += "use_MF/"
-
-    print(fname)
+    fname = f"/mnt/users/koe/plots/mock_data/width={width}/"
+    # if use_GP: fname += "use_GP/"
+    # else:      fname += "use_MF/"
     return fname
 
 
@@ -85,73 +87,80 @@ Initialize parameters for mock data generation and analysis.
 ------------------------------------------------------------
 """
 # Switches for running different parts of the analysis.
-use_GP    = False    # Note: A median filter is used if use_GP = False.
+use_GP    = True    # Note: A median filter is used if use_GP = False.
 apply_DTW = True
 corr_rad  = True
 
 args = set_args( use_GP )
     
 # Parameters for Gaussian bump (fixed feature) and noise (varying amplitudes).
-bump_size  = 10.0   # Defined in terms of percentage of max(Vbar)
-bump_size *= 2.0
-bump_loc   = 5.0
-file_FWHM  = args.ft_width
-bump_FWHM  = file_FWHM / 10
-bump_sigma = bump_FWHM / (2.0 * np.sqrt(2.0 * np.log(2.0)))
+bump_size = -4.0    # Bump size similar to that in Sanders' NGC 1560.
+bump_loc  = 5.0
 
-print(f"Correlating RCs with features of FWHM = {bump_FWHM}")
+# file_FWHM  = args.ft_width
+# bump_FWHM  = file_FWHM / 10
+# bump_sigma = bump_FWHM / (2.0 * np.sqrt(2.0 * np.log(2.0)))
 
-# Generate noise from 1 / uniform height array (less samples for GP due to demanding runtime).
+bump_sigma = args.ft_width
+
+# print(f"Correlating RCs with features of FWHM = {bump_FWHM}")
+
+# Generate noise from 1 / uniform height array (fewer iterations for GP due to demanding runtime).
 if use_GP:
-    height_arr = np.linspace(100.0, 2.0, 49, endpoint=True)
-    noise_arr = bump_size / height_arr
+    height_arr = np.linspace(20.0, 2.0, 37, endpoint=True)
+    noise_arr = - bump_size / height_arr
     num_iterations = 50
 else:
-    height_arr = np.linspace(100.0, 2.0, 99, endpoint=True)
-    noise_arr = bump_size / height_arr
+    height_arr = np.linspace(20.0, 2.0, 37, endpoint=True)
+    noise_arr = - bump_size / height_arr
     num_iterations = 200
 
 num_noise = len(noise_arr)
 
 
 # Initialize arrays for summary arrays.
-rad_spearmans     = [ [ [] for _ in range(num_noise) ] for _ in range(3) ]
-rad_pearsons      = [ [ [] for _ in range(num_noise) ] for _ in range(3) ]
-rad_Xft_spearmans = [ [ [] for _ in range(num_noise) ] for _ in range(3) ]
-rad_Xft_pearsons  = [ [ [] for _ in range(num_noise) ] for _ in range(3) ]
+# rad_spearmans     = [ [ [] for _ in range(num_noise) ] for _ in range(3) ]
+# rad_pearsons      = [ [ [] for _ in range(num_noise) ] for _ in range(3) ]
+# rad_Xft_spearmans = [ [ [] for _ in range(num_noise) ] for _ in range(3) ]
+# rad_Xft_pearsons  = [ [ [] for _ in range(num_noise) ] for _ in range(3) ]
 
-dtw_costs,  Xft_costs  = np.zeros((num_iterations, num_noise)), np.zeros((num_iterations, num_noise))
-dtw_window, Xft_window = np.zeros((num_iterations, num_noise)), np.zeros((num_iterations, num_noise))
+# Remove PCHIP interpolation and therefore higher derivatives.
+MOND_spearmans = [ [] for _ in range(num_noise) ]
+MOND_pearsons = [ [] for _ in range(num_noise) ]
+LCDM_spearmans = [ [] for _ in range(num_noise) ]
+LCDM_pearsons = [ [] for _ in range(num_noise) ]
+
+MOND_costs, LCDM_costs  = np.zeros((num_iterations, num_noise)), np.zeros((num_iterations, num_noise))
+# dtw_window, Xft_window = np.zeros((num_iterations, num_noise)), np.zeros((num_iterations, num_noise))
 
 
 # Create array of sampling rates to sample from.
-# To run this as a loop in bash: for i in {0..29}; do addqueue -q cmb -c "1-3 days" -n 1 -m 8 mock_data.py --ft-width {?} --samp-idx $i; done
 samp_idx    = args.samp_idx
 samp_rate   = np.linspace(1, 30, 30, endpoint=True, dtype=int)[samp_idx]
 num_samples = samp_rate * 10
 
-if not use_GP: MF_size = int(max( 5, bump_FWHM * samp_rate * 2 ))
+# if not use_GP: MF_size = int(max( 5, bump_FWHM * samp_rate * 2 ))
 
 
 # Print report of analyses used and some corresponding variables.
-print(f"[samp_rate = {samp_rate}] Running toy_model.py with the following methods:")
+print(f"[samp_rate = {samp_rate}] Running mock_data.py with the following methods:")
 if use_GP:    print(" - Gaussian process")
-else:         print(f" - Median filter (window length = {MF_size})")
+# else:         print(f" - Median filter (window length = {MF_size})")
 if apply_DTW: print(" - Dynamic time warping")
 if corr_rad:  print(" - Correlation coefficients (increasing radii)")
 
 
 # Simple code for calculating feature significance by comparing costs/correlation coefficients
 # between (Vobs w/ ft + Vbar w/ ft) and (Vobs W/O ft + Vbar w/ ft).
-def get_significance(corr1, corr2, rhos:bool=True):
-    if rhos == True:
-        sigma1 = (corr1[0,:,2] - corr1[0,:,0]) / 2
-        sigma2 = (corr2[0,:,2] - corr2[0,:,0]) / 2
-        ftsig = abs(( corr2[0,:,1] - corr1[0,:,1] )) / np.sqrt(sigma1**2 + sigma2**2)
-    else:
-        sigma1 = (corr1[2] - corr1[0]) / 2
-        sigma2 = (corr2[2] - corr2[0]) / 2
-        ftsig = abs(( corr2[1] - corr1[1] )) / np.sqrt(sigma1**2 + sigma2**2)
+def get_significance(corr1, corr2):
+    # if rhos == True:
+    #     sigma1 = (corr1[0,:,2] - corr1[0,:,0]) / 2
+    #     sigma2 = (corr2[0,:,2] - corr2[0,:,0]) / 2
+    #     ftsig = abs(( corr2[0,:,1] - corr1[0,:,1] )) / np.sqrt(sigma1**2 + sigma2**2)
+    # else:   # DTW dim = 3 perc x num_noise
+    sigma1 = (corr1[2] - corr1[0]) / 2
+    sigma2 = (corr2[2] - corr2[0]) / 2
+    ftsig = abs(( corr2[1] - corr1[1] )) / np.sqrt(sigma1**2 + sigma2**2)
     return ftsig
 
 
@@ -160,7 +169,13 @@ def get_significance(corr1, corr2, rhos:bool=True):
 ~~~~~~~~~~~~ MAIN LOOP ~~~~~~~~~~~~
 ===================================
 """
-fileloc = get_fname( file_FWHM, use_GP )
+fileloc = get_fname( bump_sigma )
+
+# Define galaxy radius (units ~kpc; excluding the point r=0).
+rad = np.linspace(10., 0., num_samples, endpoint=False)[::-1]
+num_rad = len(rad)
+
+Vmax, bump, Vbar_raw, vel_MOND, vel_LCDM = toy_gen(rad, bump_loc, bump_size, bump_sigma, noise_arr[0])
 
 for i in range(num_noise):
     if i%10 == 0 or use_GP:
@@ -170,43 +185,65 @@ for i in range(num_noise):
             print(f"\nRunning iteration {i+1}/{num_noise}...")
 
     noise = noise_arr[i]
-
-    # Define galaxy radius (units ~kpc; excluding the point r=0).
-    rad = np.linspace(10., 0., num_samples, endpoint=False)[::-1]
-    num_rad = len(rad)
     
-    # Generate toy RCs with residuals (Vraw = w/o ft, Vraw_werr = w/ noise; velocitites = w/ ft, v_werr = w/ noise).
-    bump, Vraw, velocities, Vraw_werr, v_werr, residuals, res_Xft = toy_gen(rad, bump_loc, bump_size, bump_sigma, noise, num_iterations)
+    # Generate toy RCs with residuals (Vraw = w/o ft, Vraw_werr = w/ noise; velocities = w/ ft, v_werr = w/ noise);
+    # dim = itr x 2 (Vbar, Vobs) x num_rad.
+    # _, Vraw, velocities, Vraw_werr, v_werr, _, _ = toy_gen(rad, bump_loc, bump_size, bump_sigma, noise, num_iterations)
+    Vbar, Vmond, Vcdm = toy_scatter(num_iterations, noise, Vmax, Vbar_raw, vel_MOND, vel_LCDM)
 
     # Vobs (w/ feature) residuals if it's generated perfectly by MOND.
-    MOND_res = (velocities[:,1,:] - Vraw[:,1,:])
+    # MOND_res = (velocities[:,1,:] - Vraw[:,1,:])
 
 
     if use_GP:
         # Apply GP regression.
-        residuals, residuals_Xft, residuals_MOND = [], [], []
+        res_Vbar, res_LCDM, res_MOND = [], [], []
 
         for itr in range(num_iterations):
-            pred_means, pred_bands = GP_fit(args, rad, v_werr[itr], rad)
-            Xft_means, Xft_bands = GP_fit(args, rad, Vraw_werr[itr], rad)
-            pred_means_MOND, pred_bands_MOND = GP_fit(args, rad, velocities[itr], rad)
+            rad_Xft = np.delete(rad, np.s_[floor(4.5*samp_rate):ceil(5.5*samp_rate)])
+            Vbar_Xft = np.delete(Vbar[itr], np.s_[floor(4.5*samp_rate):ceil(5.5*samp_rate)])
+            Vmond_Xft = np.delete(Vmond[itr], np.s_[floor(4.5*samp_rate):ceil(5.5*samp_rate)])
+            Vcdm_Xft = np.delete(Vcdm[itr], np.s_[floor(4.5*samp_rate):ceil(5.5*samp_rate)])
+            
+            Vbar_means, Vbar_bands = GP_fit(args, rad_Xft, Vbar_Xft, rad)
+            Vmond_means, Vmond_bands = GP_fit(args, rad_Xft, Vmond_Xft, rad)
+            Vcdm_means, Vcdm_bands = GP_fit(args, rad_Xft, Vcdm_Xft, rad)
 
-            residuals.append( GP_residuals(rad, v_werr[itr], rad, pred_means, pred_bands) )
-            residuals_Xft.append( GP_residuals(rad, Vraw_werr[itr], rad, Xft_means, Xft_bands) )
-            residuals_MOND.append( GP_residuals(rad, velocities[itr], rad, pred_means_MOND, pred_bands_MOND) )
+            # # Plot the generated mock data.
+            # plt.scatter(rad, Vbar[0], alpha=0.25, label=r"$V_{\text{bar}}$")
+            # plt.scatter(rad, Vmond[0], alpha=0.25, label="MOND")
+            # plt.scatter(rad, Vcdm[0], alpha=0.25, label=r"$\Lambda$CDM")
+
+            # plt.plot(rad, Vbar_means, label=r"$V_{\text{bar}}$ GP")
+            # plt.plot(rad, Vmond_means, label="MOND GP")
+            # plt.plot(rad, Vcdm_means, label="LCDM GP")
+
+            # plt.xlabel("Radius (kpc)")
+            # plt.ylabel("Velocities (km/s)")
+            # plt.legend()
+            # plt.grid()
+
+            # plt.savefig(f"{fileloc}test_plot.png")
+            # plt.close()
+
+            # raise ValueError("Test plot generated. Exiting...")
+
+            res_Vbar.append( get_residuals(rad, Vbar[itr], rad, Vbar_means, Vbar_bands) )     # dim = itr x rad
+            res_MOND.append( get_residuals(rad, Vmond[itr], rad, Vmond_means, Vmond_bands) )
+            res_LCDM.append( get_residuals(rad, Vcdm[itr], rad, Vcdm_means, Vcdm_bands) )
     
-    else:
-        # Apply median filter.
-        _, residuals     = med_filter(rad, v_werr, win_size=MF_size)
-        _, residuals_Xft = med_filter(rad, Vraw_werr, win_size=MF_size)
-        _, residuals_MOND = med_filter(rad, velocities, win_size=MF_size)
+    # else:
+    #     # Apply median filter.
+    #     _, residuals     = med_filter(rad, v_werr, win_size=MF_size)
+    #     _, residuals_Xft = med_filter(rad, Vraw_werr, win_size=MF_size)
+    #     _, residuals_MOND = med_filter(rad, velocities, win_size=MF_size)
 
 
     # Transpose residuals arrays and extract required Xft residuals for DTW:
-    # Transpose: 3D array of size num_iterations x 2 (vel) x 100 (rad) --> 2 x num_iterations x 100 (rad).
-    res_dtw = np.transpose(residuals, (1, 0, 2))
-    res_Xft = np.transpose(residuals_Xft, (1, 0, 2))[1]
-    MOND_res = np.transpose(residuals_MOND, (1, 0, 2))[1]
+    # 3D array of size num_iterations x 2 (vel) x 100 (rad) --> 2 x num_iterations x 100 (rad).
+    # res_dtw = np.transpose(residuals_Vbar, (1, 0, 2))
+    # res_Xft = np.transpose(residuals_MOND, (1, 0, 2))[1]
+    # MOND_res = np.transpose(residuals_MOND, (1, 0, 2))[1]
 
 
     """
@@ -217,12 +254,12 @@ for i in range(num_noise):
     if apply_DTW:
         # DTW analyses on full RCs.
         for itr in range(num_iterations):
-            Xft_cost = do_DTW(itr, num_rad, res_Xft, MOND_res, window=False)
-            Xft_costs[itr][i] = Xft_cost
+            MOND_cost = do_DTW(itr, num_rad, res_MOND, res_Vbar, window=False)
+            MOND_costs[itr][i] = MOND_cost
 
         for itr in range(num_iterations):
-            norm_cost = do_DTW(itr, num_rad, res_dtw[1], MOND_res, window=False)
-            dtw_costs[itr][i] = norm_cost
+            LCDM_cost = do_DTW(itr, num_rad, res_LCDM, res_Vbar, window=False)
+            LCDM_costs[itr][i] = LCDM_cost
 
 
     """
@@ -232,33 +269,15 @@ for i in range(num_noise):
     """
     # Interpolate residuals for potential use of derivatives in calculating naive correlation coefficients.
     if corr_rad:
-        # Interpolate the residuals with cubic Hermite spline splines.
-        res_fits, res_Xft_fits = [], []
-        for itr in range(num_iterations):
-            v_d0, v_d1, v_d2 = [], [], []
-            for v_comp in residuals[itr]:
-                v_d0.append(interpolate.pchip_interpolate(rad, v_comp, rad))
-                v_d1.append(interpolate.pchip_interpolate(rad, v_comp, rad, der=1))
-                v_d2.append(interpolate.pchip_interpolate(rad, v_comp, rad, der=2))
-            res_fits.append( [ v_d0, v_d1, v_d2 ] )
+        v_werr = np.transpose( np.array([ Vbar, Vmond ]), (1, 0, 2) )   # dim = itr x 2 x rad
+        rad_corr_perc = corr_radii( num_iterations, num_rad, v_werr )   # dim = 2 (Spearman, Pearson) x 3
+        MOND_spearmans[i] = rad_corr_perc[0]
+        MOND_pearsons[i]  = rad_corr_perc[1]
 
-            v_d0, v_d1, v_d2 = [], [], []
-            v_d0.append(interpolate.pchip_interpolate(rad, res_Xft[itr], rad))
-            v_d1.append(interpolate.pchip_interpolate(rad, res_Xft[itr], rad, der=1))
-            v_d2.append(interpolate.pchip_interpolate(rad, res_Xft[itr], rad, der=2))
-            res_Xft_fits.append( [ v_d0, v_d1, v_d2 ] )
-
-        # Correlation plots using spheres of increasing radius.
-        for der in range(3):
-            rad_corr_perc = corr_radii( num_iterations, der, num_rad, res_fits, v_werr )
-            rad_spearmans[der][i] = rad_corr_perc[0]
-            rad_pearsons[der][i]  = rad_corr_perc[1]
-
-            res_fits_temp, v_werr_temp = [ np.squeeze(np.array(res_fits)[:,:,0]), np.squeeze(res_Xft_fits, axis=2) ], [ v_werr[:,0,:], Vraw_werr[:,1,:] ]
-            res_fits_temp, v_werr_temp = np.transpose(res_fits_temp, (1, 2, 0, 3)), np.transpose(v_werr_temp, (1, 0, 2))
-            rad_corr_perc = corr_radii( num_iterations, der, num_rad, res_fits_temp, v_werr_temp )
-            rad_Xft_spearmans[der][i] = rad_corr_perc[0]
-            rad_Xft_pearsons[der][i]  = rad_corr_perc[1]
+        Vnfw = np.transpose( np.array([ Vbar, Vcdm ]), (1, 0, 2) )
+        rad_corr_perc = corr_radii( num_iterations, num_rad, Vnfw )
+        LCDM_spearmans[i] = rad_corr_perc[0]
+        LCDM_pearsons[i]  = rad_corr_perc[1]
 
     jax.clear_caches()    # One-line attempt to solve the JIT memory allocation problem when GP is used.
 
@@ -268,15 +287,13 @@ Calculate feature significance.
 ===============================
 """
 if apply_DTW:
-    dtw_costs   = np.nanpercentile( dtw_costs,  [16.0, 50.0, 84.0], axis=0 )
-    Xft_costs   = np.nanpercentile( Xft_costs,  [16.0, 50.0, 84.0], axis=0 )
-    dtw_ftsig = get_significance(dtw_costs, Xft_costs, rhos=False)
+    MOND_perc = np.nanpercentile( MOND_costs,  [16.0, 50.0, 84.0], axis=0 )    # dim = 3 x num_noise
+    LCDM_perc = np.nanpercentile( LCDM_costs,  [16.0, 50.0, 84.0], axis=0 )
+    dtw_ftsig = get_significance(MOND_perc, LCDM_perc)
     np.save(f"{fileloc}dtw_ftsig/num_samples={num_samples}", dtw_ftsig)
 
 if corr_rad:
-    rad_spearmans, rad_pearsons = np.array(rad_spearmans), np.array(rad_pearsons)
-    rad_Xft_spearmans, rad_Xft_pearsons = np.array(rad_Xft_spearmans), np.array(rad_Xft_pearsons)
-    rad_ftsig = get_significance(rad_pearsons, rad_Xft_pearsons, rhos=True)
+    rad_ftsig = get_significance(np.transpose(MOND_pearsons), np.transpose(LCDM_pearsons))
     np.save(f"{fileloc}rad_ftsig/num_samples={num_samples}", rad_ftsig)
 
 print("\nMemory usage: %s (kb)" %getrusage(RUSAGE_SELF).ru_maxrss)
