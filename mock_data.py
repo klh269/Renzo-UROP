@@ -6,7 +6,7 @@ then apply same analysis of correlation coefficients + DTW on residuals
 to better understand the effect/restriction of sampling rates, feature sizes and uncertainties.
 
 To run this as a for-loop in bash:
-for i in {0..29}; do addqueue -q cmb -c "1-3 days" -n 1 -m 8 mock_data.py --ft-width 0.2 --samp-idx $i; done
+for i in {0..29}; do addqueue -q cmb -c "1 week" -n 1 -m 8 mock_data.py --ft-width 0.25 --samp-idx $i; done
 """
 import numpy as np
 from math import floor, ceil
