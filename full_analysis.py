@@ -18,13 +18,15 @@ from utils_analysis.mock_gen import Vbar_sq_unc, MOND_unc, Vobs_scat
 from utils_analysis.extract_ft import ft_check
 from tqdm import tqdm
 
+plt.rcParams.update({'font.size': 13})
+
 
 testing = False
 test_multiple = False   # Loops over the first handful of galaxies instead of just the fist one (DDO161).
 make_plots = True
 use_DTW = True
-use_MSE = False
 do_correlations = True
+use_MSE = False
 
 fileloc = "/mnt/users/koe/plots/SPARC_fixedls/"
 # Options: cost wrt MOND: "dtw/"; cost wrt LCDM: "dtw/cost_vsLCDM/", original cost: "dtw/cost_vsVbar/".
