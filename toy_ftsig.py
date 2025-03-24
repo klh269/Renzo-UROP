@@ -11,6 +11,8 @@ from scipy.ndimage import gaussian_filter
 
 from utils_analysis.little_things import get_things
 
+plt.rcParams.update({'font.size': 13})
+
 """
 Define functions.
 """
@@ -63,6 +65,7 @@ def get_SPARC(ft_height:float = 0.1):
 MAIN CODE.
 """
 # Analysis switches.
+use_window = True
 # use_MF = False
 # use_GP = not use_MF
 use_THINGS = False
@@ -77,7 +80,9 @@ fname = f"/mnt/users/koe/plots/mock_data/width={bump_width}/"
 # height_arr = np.linspace(2.0, 100.0, 49, endpoint=True) if use_GP else np.linspace(2.0, 100.0, 99, endpoint=True)
 height_arr = np.linspace(20.0, 2.0, 37, endpoint=True)
 noise_arr = 20.0 / np.flip(height_arr)
-samp_rates = np.linspace(10, 300, 30, endpoint=True, dtype=int)
+
+# Define sampling rates (x-axis in 2D histogram).
+samp_rates = np.linspace(30, 110, num=9, endpoint=True, dtype=int)
 
 # Truncate arrays s.t. SnR only goes up to 20.
 # max_idx = np.where( height_arr <= 20.0 )[0][-1]
@@ -89,13 +94,14 @@ samp_rates = np.linspace(10, 300, 30, endpoint=True, dtype=int)
 # print(f"Number of SPARC galaxies shown in the plot = {len(gal_list)} / 175")
 
 # Make 2D feature significance histograms.
-signames = [ "dtw_ftsig", "rad_ftsig" ]
+if use_window: signames = [ "dtw_ftsig_window", "rad_ftsig_window" ]
+else: signames = [ "dtw_ftsig", "rad_ftsig" ]
 titles = [ "DTW", r"Pearson $\rho$" ]
 arrays = [ ["dtw_costs/", "Xft_costs/"], ["rad_pearsons/", "rad_Xft_pearsons/"] ]
 for sn in range(2):
     # Extract numpy arrays and combine into one big plottable 2D array.
     ft_significance = []
-    for smp in range(30):
+    for smp in range(len(samp_rates)):
         num_samp = samp_rates[smp]
         ftsig = np.load(f"{fname}{signames[sn]}/num_samples={num_samp}.npy")
         ft_significance.append(ftsig)
