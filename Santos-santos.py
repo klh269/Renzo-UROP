@@ -17,14 +17,14 @@ from scipy import signal, interpolate, stats
 import math
 
 import jax
-from jax import vmap
+# from jax import vmap
 import jax.random as random
 from numpyro.infer import MCMC, NUTS, init_to_median
 
-import corner
+# import corner
 import numpyro
 
-from utils_analysis.gp_utils import model, predict, run_inference
+# from utils_analysis.gp_utils import model, predict, run_inference
 from utils_analysis.dtw_utils import dtw
 from utils_analysis.Vobs_fits import MOND_vsq, NFW_fit, BIC_from_samples
 
@@ -32,9 +32,9 @@ matplotlib.use("Agg")  # noqa: E402
 
 
 testing = False
-make_plots = False
-do_DTW = False
-do_correlations = False
+make_plots = True
+do_DTW = True
+do_correlations = True
 
 fileloc = "/mnt/users/koe/plots/Santos-Santos/"
 
@@ -47,54 +47,60 @@ def main(args, ls, g, X, Y, X_test):
     """
     v_comps = [ r"$v_{bar}$", r"$v_{obs}$", r"$v_{MOND}$", r"$V_{\Lambda CDM}$" ]
     colours = [ 'tab:red', 'k', 'mediumblue', 'tab:green' ]
-    corner_dir = [ "Vbar/", "Vobs_data/", "Vobs_MOND/", "Vobs_LCDM/" ]
+    # corner_dir = [ "Vbar/", "Vobs_data/", "Vobs_MOND/", "Vobs_LCDM/" ]
     mean_prediction, percentiles = [], []
 
-    for j in range(4):
-        print("Fitting function to " + v_comps[j] + "...")
-        rng_key, rng_key_predict = random.split(random.PRNGKey(0))
-        if testing:
-            # Remove feature from Vobs before fitting GP.
-            X_Xft, Vobs_Xft = np.delete(X, np.s_[10:15], axis=0), np.delete(Y[j], np.s_[10:15], axis=0)
-            samples = run_inference(model, args, rng_key, X_Xft, Vobs_Xft)
-        else:
-            samples = run_inference(model, args, rng_key, X, Y[j])
+    # GP fits for Vbar, Vobs, MOND and LCDM.
+    # for j in range(4):
+    #     print("Fitting function to " + v_comps[j] + "...")
+    #     rng_key, rng_key_predict = random.split(random.PRNGKey(0))
+    #     if testing:
+    #         # Remove feature from Vobs before fitting GP.
+    #         X_Xft, Vobs_Xft = np.delete(X, np.s_[10:15], axis=0), np.delete(Y[j], np.s_[10:15], axis=0)
+    #         samples = run_inference(model, args, rng_key, X_Xft, Vobs_Xft)
+    #     else:
+    #         samples = run_inference(model, args, rng_key, X, Y[j])
 
-        # do prediction
-        vmap_args = (
-            random.split(rng_key_predict, samples["var"].shape[0]),
-            samples["var"],
-            samples["noise"],
-        )
-        if testing:
-            means, predictions = vmap(
-                lambda rng_key, var, noise: predict(
-                    rng_key, X_Xft, Vobs_Xft, X_test, var, ls, noise, use_cholesky=args.use_cholesky
-                )
-            )(*vmap_args)
-        else:
-            means, predictions = vmap(
-                lambda rng_key, var, noise: predict(
-                    rng_key, X, Y[j], X_test, var, ls, noise, use_cholesky=args.use_cholesky
-                )
-            )(*vmap_args)
+    #     # do prediction
+    #     vmap_args = (
+    #         random.split(rng_key_predict, samples["var"].shape[0]),
+    #         samples["var"],
+    #         samples["noise"],
+    #     )
+    #     if testing:
+    #         means, predictions = vmap(
+    #             lambda rng_key, var, noise: predict(
+    #                 rng_key, X_Xft, Vobs_Xft, X_test, var, ls, noise, use_cholesky=args.use_cholesky
+    #             )
+    #         )(*vmap_args)
+    #     else:
+    #         means, predictions = vmap(
+    #             lambda rng_key, var, noise: predict(
+    #                 rng_key, X, Y[j], X_test, var, ls, noise, use_cholesky=args.use_cholesky
+    #             )
+    #         )(*vmap_args)
 
-        mean_pred = np.mean(means, axis=0)
-        mean_prediction.append(mean_pred)
-        gp_predictions[j] = mean_pred
+    #     mean_pred = np.mean(means, axis=0)
+    #     mean_prediction.append(mean_pred)
+    #     gp_predictions[j] = mean_pred
 
-        confidence_band = np.percentile(predictions, [16.0, 84.0], axis=0)
-        percentiles.append(confidence_band)
-        gp_16percent[j] = confidence_band[0]
-        gp_84percent[j] = confidence_band[1]
+    #     confidence_band = np.percentile(predictions, [16.0, 84.0], axis=0)
+    #     percentiles.append(confidence_band)
+    #     gp_16percent[j] = confidence_band[0]
+    #     gp_84percent[j] = confidence_band[1]
 
-        if make_plots:
-            labels = ["var", "noise"]
-            samples_arr = np.vstack([samples[label] for label in labels]).T
-            fig = corner.corner(samples_arr, show_titles=True, labels=labels, title_fmt=".4f", quantiles=[0.16, 0.5, 0.84], smooth=1)
-            fig.savefig(fileloc+"corner_plots/"+corner_dir[j]+g+".png", dpi=300, bbox_inches="tight")
-            plt.close(fig)
+    #     if make_plots:
+    #         labels = ["var", "noise"]
+    #         samples_arr = np.vstack([samples[label] for label in labels]).T
+    #         fig = corner.corner(samples_arr, show_titles=True, labels=labels, title_fmt=".4f", quantiles=[0.16, 0.5, 0.84], smooth=1)
+    #         fig.savefig(fileloc+"corner_plots/"+corner_dir[j]+g+".png", dpi=300, bbox_inches="tight")
+    #         plt.close(fig)
 
+    # Load in GP results from combined_dtw.py
+    gp_fits = np.load(f"/mnt/users/koe/gp_fits/Santos-Santos/{g}.npy")
+    mean_prediction = [ gp_fits[1], gp_fits[2], gp_fits[3], gp_fits[4] ]    # Mean predictions from GP for [ Vbar, Vobs, MOND, LCDM ]
+    lower_percentile = [ gp_fits[5], gp_fits[6], gp_fits[7], gp_fits[8] ]   # 16t percentiles from GP
+    upper_percentile = [ gp_fits[9], gp_fits[10], gp_fits[11], gp_fits[12] ]    # 84th percentiles from GP
     
     # Compute residuals of fits.
     res_Vbar, res_Vobs, res_MOND, res_LCDM = [], [] ,[], []
@@ -234,7 +240,8 @@ def main(args, ls, g, X, Y, X_test):
                     # Plot mean prediction from GP.
                     ax0.plot(X_test, mean_prediction[j], color=colours[j], label=v_comps[j])
                     # Fill in 1-sigma (68%) confidence band of GP fit.
-                    ax0.fill_between(X_test, percentiles[j][0, :], percentiles[j][1, :], color=colours[j], alpha=0.2)
+                    # ax0.fill_between(X_test, percentiles[j][0, :], percentiles[j][1, :], color=colours[j], alpha=0.2)
+                    ax0.fill_between(X_test, lower_percentile[j], upper_percentile[j], color=colours[j], alpha=0.2)
 
                 ax0.legend(bbox_to_anchor=(1, 1), loc="upper left")
                 ax0.grid()
@@ -334,7 +341,8 @@ def main(args, ls, g, X, Y, X_test):
                         # Plot mean prediction from GP.
                         ax0.plot(X_test, mean_prediction[j], color=colours[j], label=v_comps[j])
                         # Fill in 1-sigma (68%) confidence band of GP fit.
-                        ax0.fill_between(X_test, percentiles[j][0, :], percentiles[j][1, :], color=colours[j], alpha=0.2)
+                        # ax0.fill_between(X_test, percentiles[j][0, :], percentiles[j][1, :], color=colours[j], alpha=0.2)
+                        ax0.fill_between(X_test, lower_percentile[j], upper_percentile[j], color=colours[j], alpha=0.2)
 
                     ax0.legend(bbox_to_anchor=(1, 1), loc="upper left")
                     ax0.grid()
@@ -459,13 +467,13 @@ if __name__ == "__main__":
         # Save GP fits to CSV for later use (for incorporating uncertainties/errors).
         # One array per galaxy, each containing 13 lists:
         # radii, mean (x4), 16th percentile (x4), 84th percentile (x4).
-        gp_fits = np.array([rad, *gp_predictions, *gp_16percent, *gp_84percent])
-        np.save("/mnt/users/koe/gp_fits/Santos-Santos/"+g, gp_fits)
-        print("GP results successfully saved as /mnt/users/koe/gp_fits/Santos-Santos/"+g+".npy.")
+        # gp_fits = np.array([rad, *gp_predictions, *gp_16percent, *gp_84percent])
+        # np.save("/mnt/users/koe/gp_fits/Santos-Santos/"+g, gp_fits)
+        # print("GP results successfully saved as /mnt/users/koe/gp_fits/Santos-Santos/"+g+".npy.")
     
-    if not testing:
-        np.save("/mnt/users/koe/gp_fits/Santos-Santos/galaxies", galaxies)
-        print("\nList of analyzed galaxies now saved as /mnt/users/koe/gp_fits/Santos-Santos/galaxies.npy.")
+    # if not testing:
+    #     np.save("/mnt/users/koe/gp_fits/Santos-Santos/galaxies", galaxies)
+    #     print("\nList of analyzed galaxies now saved as /mnt/users/koe/gp_fits/Santos-Santos/galaxies.npy.")
 
     if make_plots and not testing:
         if do_DTW:
@@ -479,6 +487,9 @@ if __name__ == "__main__":
             for j in range(3):
                 costs_sorted.append(norm_cost[j][sort_args])
 
+            np.save("/mnt/users/koe/Santos-analysis/dtw", costs_sorted)
+            np.save("/mnt/users/koe/Santos-analysis/dtw_args", sort_args)
+
             # Plot histogram of normalized DTW alignment costs of all galaxies.
             # plt.title("Normalized DTW alignment costs")
             hist_labels = [ "Data", "MOND", r"$\Lambda$CDM" ]
@@ -491,7 +502,7 @@ if __name__ == "__main__":
             
             plt.legend()
             plt.xticks([])
-            plt.savefig(fileloc+"dtw/histo1.png", dpi=300, bbox_inches="tight")
+            plt.savefig(fileloc+"dtw/histo1.pdf", dpi=300, bbox_inches="tight")
             plt.close()
         
 
@@ -531,6 +542,9 @@ if __name__ == "__main__":
             for j in range(3):
                 spearman_sorted.append(spearman_data[j][sort_args])
 
+            np.save("/mnt/users/koe/Santos-analysis/spearman", spearman_sorted)
+            np.save("/mnt/users/koe/Santos-analysis/spearman_args", sort_args)
+
             # Plot histogram of Spearman correlations for all galaxies.
             # plt.title("Spearman correlation coefficients")
             hist_labels = [ "Data", "MOND", r"$\Lambda$CDM" ]
@@ -555,6 +569,9 @@ if __name__ == "__main__":
             for j in range(3):
                 pearson_sorted.append(pearson_data[j][sort_args])
 
+            np.save("/mnt/users/koe/Santos-analysis/pearson", pearson_sorted)
+            np.save("/mnt/users/koe/Santos-analysis/pearson_args", sort_args)
+
             # Plot histogram of Pearson correlations for all galaxies.
             # plt.title("pearson correlation coefficients")
             hist_labels = [ "Data", "MOND", r"$\Lambda$CDM" ]
@@ -567,7 +584,7 @@ if __name__ == "__main__":
             
             plt.legend()
             plt.xticks([])
-            plt.savefig(fileloc+"correlations/radii/d0/pearson_histo1.png", dpi=300, bbox_inches="tight")
+            plt.savefig(fileloc+"correlations/radii/d0/pearson_histo1.pdf", dpi=300, bbox_inches="tight")
             plt.close()
 
     print("\nMax memory usage: %s (kb)" %getrusage(RUSAGE_SELF).ru_maxrss)
