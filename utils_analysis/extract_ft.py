@@ -46,8 +46,8 @@ def ft_check(arr, errV, min_height:float=2.0):
     lb_ft, rb_ft = [], []   # Lists to store left and right boundaries of features.
     for segment in split_idx:
         condition = np.abs(np.array(arr_normalized[segment])) > min_height
-        if np.count_nonzero(condition) >= 1 and len(segment) >= 3:
-        # if np.count_nonzero(condition) >= 3:
+        # if np.count_nonzero(condition) >= 1 and len(segment) >= 3:
+        if np.count_nonzero(condition) >= 3:
             lb_ft.append(segment[0])
             rb_ft.append(segment[-1])
 

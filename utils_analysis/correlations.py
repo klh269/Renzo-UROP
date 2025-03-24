@@ -17,7 +17,7 @@ deriv_dir = [ "d0", "d1", "d2" ]
 color_bar = "orange"
 
 
-def corr_radii(num_iterations:int, num_rad:int, v_werr, make_plots:bool=False,
+def corr_radii(num_iterations:int, num_rad:int, v_werr, use_window:bool=False, make_plots:bool=False,
                fileloc="", noise_ratio=0.0, rad=[], bump=[], Vraw=[], residuals=[], noise=0.):
     """
     v_werr must have dimensions of itr x 2 (Vbar, Vobs) x rad.
@@ -30,9 +30,14 @@ def corr_radii(num_iterations:int, num_rad:int, v_werr, make_plots:bool=False,
     for itr in range(num_iterations):
         # Correlate Vobs and Vbar (d0) as a function of (maximum) radius, i.e. spheres of increasing r.
         rad_corr = [[], []]
-        for j in range(5, num_rad):
-            rad_corr[0].append(stats.spearmanr(v_werr[itr][0][:j], v_werr[itr][1][:j])[0])
-            rad_corr[1].append(stats.pearsonr(v_werr[itr][0][:j], v_werr[itr][1][:j])[0])
+        if use_window:
+            for j in range(2, num_rad):
+                rad_corr[0].append(stats.spearmanr(v_werr[itr][0][:j], v_werr[itr][1][:j])[0])
+                rad_corr[1].append(stats.pearsonr(v_werr[itr][0][:j], v_werr[itr][1][:j])[0])
+        else:
+            for j in range(5, num_rad):
+                rad_corr[0].append(stats.spearmanr(v_werr[itr][0][:j], v_werr[itr][1][:j])[0])
+                rad_corr[1].append(stats.pearsonr(v_werr[itr][0][:j], v_werr[itr][1][:j])[0])
         radii_corr[itr] = rad_corr
 
         # Compute baryonic dominance, i.e. average Vbar/Vobs(data) from centre to some max radius.
@@ -42,8 +47,12 @@ def corr_radii(num_iterations:int, num_rad:int, v_werr, make_plots:bool=False,
         bar_ratios[itr] = bar_ratio
 
         # Correlate baryonic ratio with correlation coefficients.
-        rad_spearman[itr] = stats.spearmanr(rad_corr[0], bar_ratio[5:])[0]
-        rad_pearson[itr]  = stats.pearsonr(rad_corr[1], bar_ratio[5:])[0]
+        if use_window:
+            rad_spearman[itr] = stats.spearmanr(rad_corr[0], bar_ratio[2:])[0]
+            rad_pearson[itr]  = stats.pearsonr(rad_corr[1], bar_ratio[2:])[0]
+        else:
+            rad_spearman[itr] = stats.spearmanr(rad_corr[0], bar_ratio[5:])[0]
+            rad_pearson[itr]  = stats.pearsonr(rad_corr[1], bar_ratio[5:])[0]
     
     # Extract 1-sigma percentiles and means from iterations.
     bar_percentiles = np.nanpercentile( bar_ratios,   [16.0, 50.0, 84.0], axis=0 )

@@ -51,7 +51,7 @@ def dtw(dist_mat):
     return (path[::-1], cost_mat)
 
 
-def do_DTW(itr:int, length:int, arr1, arr2, window:bool, make_plots=False, file_names=""):
+def do_DTW(itr:int, length:int, arr1, arr2, window:bool=False, make_plots=False, file_names=""):
     """
     arr1 and arr2 are 2D array-like objects of size (iterations x length);
     arr2 should be residuals from MOND(Vbar) as we defined it to have cost = 0;
