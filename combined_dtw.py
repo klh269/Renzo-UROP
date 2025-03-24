@@ -16,7 +16,6 @@ Compare the normalised alginment cost to get a handle of correlation.
 import jax.experimental
 import pandas as pd
 import argparse
-import time
 from resource import getrusage, RUSAGE_SELF
 
 import matplotlib
@@ -27,19 +26,19 @@ import math
 
 import jax
 from jax import vmap
-import jax.numpy as jnp
 import jax.random as random
 
 import corner
 import numpyro
 
+from tqdm import tqdm
 from utils_analysis.gp_utils import model, predict, run_inference
 from utils_analysis.dtw_utils import dtw
 
 matplotlib.use("Agg")  # noqa: E402
 
 
-testing = False      # Only analyze NGC 6946.
+testing = False      # Only analyze NGC0024.
 test_multiple = False   # Loops over the first handful of galaxies instead of just the fist one (DDO161).
 make_plots = True
 do_DTW = False
@@ -49,7 +48,7 @@ fileloc = "/mnt/users/koe/plots/combined_dtw/"
 
 
 # Main code to run.
-def main(args, g, X, Y, X_test): 
+def main(args, g, X, Y, X_test, ls): 
     """
     Do inference for Vbar with uniform prior for correlation length,
     then apply the resulted lengthscale to Vobs (both real and mock data).
@@ -57,72 +56,71 @@ def main(args, g, X, Y, X_test):
     v_comps = [ "Vbar (SPARC)", "Vobs (SPARC)", "Vobs (MOND)", "Vobs (LCDM)" ]
     colours = [ 'tab:red', 'k', 'mediumblue', 'tab:green' ]
     corner_dir = [ "Vbar/", "Vobs_data/", "Vobs_MOND/", "Vobs_LCDM/" ]
-    mean_prediction = []
-    percentiles = []
 
-    # GP on Vbar with uniform prior on length.
-    print("Fitting function to " + v_comps[0] + "...")
-    rng_key, rng_key_predict = random.split(random.PRNGKey(0))
-    samples = run_inference(model, args, rng_key, X, Y[0])
+    # print(f"Fitting function to {v_comps[1]} with correlation length = {ls}...")
+    # rng_key, rng_key_predict = random.split(random.PRNGKey(0))
+    # samples = run_inference(model, args, rng_key, X, Y[1])
 
-    # do prediction
-    vmap_args = (
-        random.split(rng_key_predict, samples["var"].shape[0]),
-        samples["var"],
-        samples["length"],
-        samples["noise"],
-    )
-    means, predictions = vmap(
-        lambda rng_key, var, length, noise: predict(
-            rng_key, X, Y[0], X_test, var, length, noise, use_cholesky=args.use_cholesky
-        )
-    )(*vmap_args)
+    # # do prediction
+    # vmap_args = (
+    #     random.split(rng_key_predict, samples["var"].shape[0]),
+    #     samples["var"],
+    #     samples["noise"],
+    # )
+    # means, predictions = vmap(
+    #     lambda rng_key, var, noise: predict(
+    #         rng_key, X, Y[1], X_test, var, ls, noise, use_cholesky=args.use_cholesky
+    #     )
+    # )(*vmap_args)
 
-    mean_pred = np.mean(means, axis=0)
-    mean_prediction.append(mean_pred)
-    gp_predictions[0] = mean_pred
+    # mean_pred = np.mean(means, axis=0)
+    # gp_predictions[1] = mean_pred
 
-    confidence_band = np.percentile(predictions, [16.0, 84.0], axis=0)
-    percentiles.append(confidence_band)
-    gp_16percent[0] = confidence_band[0]
-    gp_84percent[0] = confidence_band[1]
+    # confidence_band = np.percentile(predictions, [16.0, 84.0], axis=0)
+    # gp_16percent[1] = confidence_band[0]
+    # gp_84percent[1] = confidence_band[1]
 
-    if make_plots:
-        labels = ["length", "var", "noise"]
-        samples_arr = np.vstack([samples[label] for label in labels]).T
-        fig = corner.corner(samples_arr, show_titles=True, labels=labels, title_fmt=".3f", quantiles=[0.16, 0.5, 0.84], smooth=1)
-        fig.savefig(fileloc+"corner_plots/"+corner_dir[0]+g+".png", dpi=300, bbox_inches="tight")
-        plt.close(fig)
+    # if make_plots:
+    #     labels = ["var", "noise"]
+    #     samples_arr = np.vstack([samples[label] for label in labels]).T
+    #     fig = corner.corner(samples_arr, show_titles=True, labels=labels, title_fmt=".3f", quantiles=[0.16, 0.5, 0.84], smooth=1)
+    #     fig.savefig(fileloc+"corner_plots/"+corner_dir[1]+g+".png", dpi=300, bbox_inches="tight")
+    #     plt.close(fig)
 
     # GP on Vobs with fixed hyperparameters from Vbar.
-    vr = stats.mode(np.round(samples["var"], 0))[0]
-    print(f"var MAP = {vr}")
-    ls = stats.mode(np.round(samples["length"], 2))[0]
-    print(f"length MAP = {ls}")
-    ns = stats.mode(np.round(samples["noise"], 1))[0]
-    print(f"noise MAP = {ns}")
+    # vr = stats.mode(np.round(samples["var"], 0))[0]
+    # vr = np.median(samples["var"])
+    # print(f"var MAP = {vr}")
+    # ls = stats.mode(np.round(samples["length"], 2))[0]
+    # ls = np.median(samples["length"])
+    # ls_ALL.append(ls)
+    # print(f"length MAP = {ls}")
+    # ns = stats.mode(np.round(samples["noise"], 1))[0]
+    # ns = np.median(samples["noise"])
+    # print(f"noise MAP = {ns}")
 
-    print(f"\nFitting function to all Vobs with length = {ls}...")
-    for j in range(1, 4):
+    # print(f"\nFitting function to each RC with ls = {ls}...")
+    for j in range(4):
         # print("\nFitting function to " + v_comps[j] + " with length = " + str(round(ls, 2)) + "...")
         rng_key, rng_key_predict = random.split(random.PRNGKey(0))
+        samples = run_inference(model, args, rng_key, X, Y[j], ls=ls)
 
         # do prediction
         vmap_args = (
             random.split(rng_key_predict, samples["var"].shape[0]),
+            samples["var"],
+            samples["noise"],
         )
         means, predictions = vmap(
-            lambda rng_key: predict(
-                rng_key, X, Y[j], X_test, vr, ls, ns, use_cholesky=args.use_cholesky
+            lambda rng_key, var, noise: predict(
+                rng_key, X, Y[j], X_test, var, ls, noise, use_cholesky=args.use_cholesky
             )
         )(*vmap_args)
 
         mean_pred = np.mean(means, axis=0)
-        mean_prediction.append(mean_pred)
         gp_predictions[j] = mean_pred
 
         confidence_band = np.percentile(predictions, [16.0, 84.0], axis=0)
-        percentiles.append(confidence_band)
         gp_16percent[j] = confidence_band[0]
         gp_84percent[j] = confidence_band[1]
 
@@ -135,14 +133,41 @@ def main(args, g, X, Y, X_test):
 
     
     # Compute residuals of fits.
-    res_Vbar, res_Vobs, res_MOND, res_LCDM = [], [] ,[], []
-    for k in range(len(X)):
-        idx = (np.abs(X_test - X[k])).argmin()
-        res_Vbar.append(Y[0][k] - mean_prediction[0][idx])
-        res_Vobs.append(Y[1][k] - mean_prediction[1][idx])
-        res_MOND.append(Y[2][k] - mean_prediction[2][idx])
-        res_LCDM.append(Y[3][k] - mean_prediction[3][idx])
-    residuals = np.array([ res_Vbar, res_Vobs, res_MOND, res_LCDM ])
+    if make_plots or do_DTW or do_correlations:
+        res_Vbar, res_Vobs, res_MOND, res_LCDM = [], [] ,[], []
+        for k in range(len(X)):
+            idx = (np.abs(X_test - X[k])).argmin()
+            res_Vbar.append(Y[0][k] - gp_predictions[0][idx])
+            res_Vobs.append(Y[1][k] - gp_predictions[1][idx])
+            res_MOND.append(Y[2][k] - gp_predictions[2][idx])
+            res_LCDM.append(Y[3][k] - gp_predictions[3][idx])
+        residuals = np.array([ res_Vbar, res_Vobs, res_MOND, res_LCDM ])
+
+        if make_plots:
+            # Plot GP fits as 1 main plot + 1 subplot (residuals).
+            fig1, (ax0, ax1) = plt.subplots(2, 1, sharex=True, gridspec_kw={'height_ratios': [5, 2]})
+            ax0.set_title("Residuals correlation: "+g)
+            ax0.set_ylabel("Velocities (km/s)")
+
+            for j in range(4):
+                # Scatter plot for data/mock data points.
+                ax0.scatter(X, Y[j], color=colours[j], alpha=0.3, label=v_comps[j])
+                # Plot mean prediction from GP.
+                ax0.plot(X_test, gp_predictions[j], color=colours[j])
+                # Fill in 1-sigma (68%) confidence band of GP fit.
+                ax0.fill_between(X_test, gp_16percent[j], gp_84percent[j], color=colours[j], alpha=0.2)
+
+            ax0.legend(bbox_to_anchor=(1, 1), loc="upper left")
+            ax0.grid()
+
+            ax1.set_ylabel("Residuals (km/s)")
+            for j in range(4):
+                ax1.plot(r, residuals[j], 'o-', color=colours[j], alpha=0.45)
+            ax1.grid()
+
+            plt.subplots_adjust(hspace=0.05)
+            fig1.savefig(fileloc+"ls_fits/"+g+".png", dpi=300, bbox_inches="tight")
+            plt.close()
 
 
     """
@@ -281,7 +306,7 @@ def main(args, g, X, Y, X_test):
         #             # Compute baryonic dominance, i.e. average Vbar/Vobs from centre to some max radius.
         #             bar_ratio = []
         #             for rd in range(len(X_test)):
-        #                 bar_ratio.append(sum(mean_prediction[0][:rd]/mean_prediction[j+1][:rd]) / (rd+1))
+        #                 bar_ratio.append(sum(gp_predictions[0][:rd]/gp_predictions[j+1][:rd]) / (rd+1))
 
         #             # Compute correlation between rs or rp and the baryonic ratio, using rs for rs-bar and rp for rp-bar.
         #             correlations_comp = []
@@ -320,7 +345,7 @@ def main(args, g, X, Y, X_test):
         # Compute baryonic dominance, i.e. average Vbar/Vobs(data) from centre to some max radius.
         bar_ratio = []
         for rd in range(len(X_test)):
-            bar_ratio.append(sum(mean_prediction[0][:rd]/mean_prediction[1][:rd]) / (rd+1))
+            bar_ratio.append(sum(gp_predictions[0][:rd]/gp_predictions[1][:rd]) / (rd+1))
 
         if make_plots:
             # Plot corrletaions as 1 main plot + 1 subplot, using only Vobs from data for Vbar/Vobs.
@@ -335,9 +360,9 @@ def main(args, g, X, Y, X_test):
                     # Scatter plot for data/mock data points.
                     ax0.scatter(X, Y[j], color=colours[j], alpha=0.3)
                     # Plot mean prediction from GP.
-                    ax0.plot(X_test, mean_prediction[j], color=colours[j], label=v_comps[j])
+                    ax0.plot(X_test, gp_predictions[j], color=colours[j], label=v_comps[j])
                     # Fill in 1-sigma (68%) confidence band of GP fit.
-                    ax0.fill_between(X_test, percentiles[j][0, :], percentiles[j][1, :], color=colours[j], alpha=0.2)
+                    ax0.fill_between(X_test, gp_16percent[j], gp_84percent[j], color=colours[j], alpha=0.2)
 
                 ax0.legend(bbox_to_anchor=(1, 1), loc="upper left")
                 ax0.grid()
@@ -416,7 +441,7 @@ def main(args, g, X, Y, X_test):
             # Compute average baryonic dominance (using Vobs from SPARC data) in moving window.
             wbar_ratio = []
             for j in range(50, wmax):
-                wbar_ratio.append( sum( mean_prediction[0][j-50:j+50] / mean_prediction[1][j-50:j+50] ) / 101 )
+                wbar_ratio.append( sum( gp_predictions[0][j-50:j+50] / gp_predictions[1][j-50:j+50] ) / 101 )
 
 
             """
@@ -436,9 +461,9 @@ def main(args, g, X, Y, X_test):
                         # Scatter plot for data/mock data points.
                         ax0.scatter(X, Y[j], color=colours[j], alpha=0.3)
                         # Plot mean prediction from GP.
-                        ax0.plot(X_test, mean_prediction[j], color=colours[j], label=v_comps[j])
+                        ax0.plot(X_test, gp_predictions[j], color=colours[j], label=v_comps[j])
                         # Fill in 1-sigma (68%) confidence band of GP fit.
-                        ax0.fill_between(X_test, percentiles[j][0, :], percentiles[j][1, :], color=colours[j], alpha=0.2)
+                        ax0.fill_between(X_test, gp_16percent[j], gp_84percent[j], color=colours[j], alpha=0.2)
 
                     ax0.legend(bbox_to_anchor=(1, 1), loc="upper left")
                     ax0.grid()
@@ -475,7 +500,7 @@ def main(args, g, X, Y, X_test):
                     plt.close()
 
 
-if __name__ == "__main__":
+def GP_args():
     assert numpyro.__version__.startswith("0.15.0")
     numpyro.enable_x64()
     parser = argparse.ArgumentParser(description="Gaussian Process example") # To keep the inference from getting constant samples.
@@ -498,6 +523,10 @@ if __name__ == "__main__":
     numpyro.set_platform(args.device)
     numpyro.set_host_device_count(args.num_chains)
 
+    return args
+
+if __name__ == "__main__":
+    args = GP_args()
 
     # Get galaxy data from table1.
     file = "/mnt/users/koe/SPARC_Lelli2016c.mrt.txt"
@@ -553,14 +582,15 @@ if __name__ == "__main__":
     bulged_count = 0
     xbulge_count = 0
     
-    galaxy, correlations_ALL = [], []
+    galaxy, correlations_ALL, ls_ALL = [], [], []
     dtw_cost = [ [], [], [] ]
     norm_cost = [ [], [], [] ]
 
-    # for i in tqdm(range(galaxy_count)):
-    for i in range(galaxy_count):
+    for i in tqdm(range(galaxy_count), desc="SPARC galaxies"):
+    # for i in range(galaxy_count):
         if testing and not test_multiple:
-            i = 91  # NGC 6946.
+            # i = 91  # NGC6946
+            i = 32  # NGC0024
 
         g = table["Galaxy"][i]
             
@@ -602,17 +632,21 @@ if __name__ == "__main__":
 
         X, X_test = r.to_numpy(), rad
         
-        print("")
-        print("==================================")
-        print("Analyzing galaxy "+g+" ("+str(i+1)+"/175)")
-        print("==================================")
+        # print("")
+        # print("==================================")
+        # print("Analyzing galaxy "+g+" ("+str(i+1)+"/175)")
+        # print("==================================")
 
         gp_predictions = [ [], [], [], [] ]
         gp_16percent = [ [], [], [], [] ]
         gp_84percent = [ [], [], [], [] ]
 
-        main(args, g, X, v_components, X_test)
-        print("\nMemory usage: %s (kb)" %getrusage(RUSAGE_SELF).ru_maxrss)
+        ls_dict = np.load("/mnt/users/koe/gp_fits/ls_dict.npy", allow_pickle=True).item()
+        ls = ls_dict[g]
+
+        main(args, g, X, v_components, X_test, ls)
+
+        # print("\nMemory usage: %s (kb)" %getrusage(RUSAGE_SELF).ru_maxrss)
         jax.clear_caches()    # One-line attempt to solve the JIT memory allocation problem.
 
         # Save GP fits to CSV for later use (for incorporating uncertainties/errors).
@@ -620,13 +654,15 @@ if __name__ == "__main__":
         # radii, mean (x4), 16th percentile (x4), 84th percentile (x4).
         gp_fits = np.array([rad, *gp_predictions, *gp_16percent, *gp_84percent])
         np.save("/mnt/users/koe/gp_fits/"+g, gp_fits)
-        print("\nGP results successfully saved as /mnt/users/koe/gp_fits/"+g+".npy.")
+        # print("\nGP results successfully saved as /mnt/users/koe/gp_fits/"+g+".npy.")
 
         galaxy.append(g)
     
-    if not testing:
-        np.save("/mnt/users/koe/gp_fits/galaxy", galaxy)
-        print("\nList of analyzed galaxies now saved as /mnt/users/koe/gp_fits/galaxy.npy.")
+    # if not testing:
+    #     np.save("/mnt/users/koe/gp_fits/galaxy", galaxy)
+    #     print("\nList of analyzed galaxies now saved as /mnt/users/koe/gp_fits/galaxy.npy.")
+    #     np.save("/mnt/users/koe/gp_fits/ls_ALL", ls_ALL)
+    #     print("\nList of length scales now saved as /mnt/users/koe/gp_fits/ls_ALL.npy.")
 
     if make_plots and do_DTW:
         """
