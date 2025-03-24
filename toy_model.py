@@ -28,8 +28,8 @@ matplotlib.use("Agg")
 
 
 # Switches for running different parts of the analysis.
-use_MF       = True
-use_GP       = False
+use_MF       = False
+use_GP       = True
 apply_DTW    = True
 corr_rad     = True
 corr_win     = False
@@ -76,7 +76,7 @@ else:
 bump_size  = 20.0   # Defined in terms of percentage of max(Vbar)
 bump_loc   = 5.0
 bump_FWHM  = args.ft_width
-fileloc += f"FWHM={bump_FWHM}"  # Save arrays to different directories for different feature widths.
+fileloc += f"FWHM={bump_FWHM}/"  # Save arrays to different directories for different feature widths.
 bump_FWHM /= 10
 bump_sigma = bump_FWHM / (2.0 * np.sqrt(2.0 * np.log(2.0)))
 
@@ -86,7 +86,7 @@ if use_MF and use_GP:
     raise Exception("GP and median filter cannot be used simultaneously!")
 elif use_MF:
     fileloc += "use_MF/"
-    MF_size = 20    # Define window size for median filter (if used).
+    MF_size = int(min( 5, bump_FWHM * 20 ))   # Define window size for median filter (2 * ft width).
 elif use_GP:
     fileloc += "use_GP/"
 
