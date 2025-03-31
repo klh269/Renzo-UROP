@@ -122,6 +122,7 @@ def Vobs_fit(table, i_table, data, bulged, profile):
         # rc = sample("Rc", dist.Uniform(0., 100*Rmax))
     
     # Sample mass-to-light ratios.
+    smp_pgas  = sample("Gas M/L", dist.TruncatedNormal(1.0, 0.04, low=0.0))
     smp_pdisk = sample("Disk M/L", dist.TruncatedNormal(pdisk, 0.125, low=0.0))
     if bulged:
         smp_pbul = sample("Bulge M/L", dist.TruncatedNormal(pbul, 0.175, low=0.0))        
@@ -136,25 +137,23 @@ def Vobs_fit(table, i_table, data, bulged, profile):
     e_Vobs = deterministic("e_Vobs", jnp.array(data["errV"]) * inc_scaling)
 
     # Sample luminosity.
-    L = sample("L", dist.TruncatedNormal(table["L"][i_table], table["e_L"][i_table], low=0.0))
-    smp_pdisk *= L / table["L"][i_table]
-    smp_pbul *= L / table["L"][i_table]
-
-    # Vobs = deterministic("Vobs", jnp.array(data["Vobs"]))
-    # e_Vobs = deterministic("e_Vobs", jnp.array(data["errV"]))
+    # L = sample("L", dist.TruncatedNormal(table["L"][i_table], table["e_L"][i_table], low=0.0))
+    # smp_pdisk *= L / table["L"][i_table]
+    # smp_pbul *= L / table["L"][i_table]
 
     # Sample distance to the galaxy.
     d = sample("Distance", dist.TruncatedNormal(table["D"][i_table], table["e_D"][i_table], low=0.0))
     d_scaling = d / table["D"][i_table]
 
     if bulged:
-        Vbar_squared = (jnp.array(data["Vgas"]**2) + 
+        Vbar_squared = (jnp.array(data["Vgas"]**2) * smp_pgas + 
                         jnp.array(data["Vdisk"]**2) * smp_pdisk + 
                         jnp.array(data["Vbul"]**2) * smp_pbul)
     else:
-        Vbar_squared = (jnp.array(data["Vgas"]**2) + 
+        Vbar_squared = (jnp.array(data["Vgas"]**2) * smp_pgas + 
                         jnp.array(data["Vdisk"]**2) * smp_pdisk)
     Vbar_squared *= d_scaling
+    _ = deterministic("Vbar", jnp.sqrt(Vbar_squared))
 
     # Calculate the predicted velocity.
     r = deterministic("r", jnp.array(data["Rad"]) * d_scaling)
@@ -178,6 +177,9 @@ def Vobs_fit(table, i_table, data, bulged, profile):
         Vpred = deterministic("Vpred", jnp.sqrt(MOND_vsq(r, Vbar_squared)))
     else:
         raise ValueError(f"Unknown profile: '{profile}'.")
+    
+    # Scatter Vobs with errV.
+    # sample("Vpred scattered", dist.Normal(Vpred, e_Vobs))
     
     ll = jnp.sum(dist.Normal(Vpred, e_Vobs).log_prob(Vobs))
     # We want to keep track of the log likelihood for BIC/AIC calculations.
