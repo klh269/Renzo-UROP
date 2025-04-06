@@ -16,9 +16,9 @@ colours = [ "mediumblue", "tab:green" ]
 labels = [ "MOND", r"$\Lambda$CDM" ]
 
 pearson_data = [ 0.89, 0.98, 0.60, 0.82 ]
-pearson_med = np.array([ [0.74, 0.30], [0.81, 0.43], [0.50, 0.18], [0.56, 0.23] ])
+pearson_med = np.array([ [0.74, 0.30], [0.81, 0.43], [0.50, 0.18], [0.57, 0.22] ])
 pearson_err = np.array([ [ [0.08, 0.11], [0.21, 0.23] ], [ [0.13, 0.22], [0.36, 0.55] ],
-                         [ [0.09, 0.10], [0.12, 0.12] ], [ [0.10, 0.12], [0.19, 0.23] ] ])
+                         [ [0.09, 0.09], [0.11, 0.12] ], [ [0.10, 0.13], [0.19, 0.23] ] ])
 
 ax[0].scatter( pearson_data, names, c="tab:red", marker='x' )
 for i in range(2): 
