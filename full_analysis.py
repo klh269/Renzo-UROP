@@ -10,6 +10,7 @@ from resource import getrusage, RUSAGE_SELF
 import jax
 
 import matplotlib.pyplot as plt
+from matplotlib.transforms import Affine2D
 import numpy as np
 from scipy import stats
 
@@ -23,16 +24,16 @@ plt.rcParams.update({'font.size': 13})
 
 testing = False
 test_multiple = False   # Loops over the first handful of galaxies instead of just the fist one (DDO161).
-make_plots = True
-use_DTW = True
-do_correlations = True
-use_MSE = False
+make_plots = False
+use_DTW = False
+do_correlations = False
+# use_MSE = False
 
 fileloc = "/mnt/users/koe/plots/SPARC_fixedls/"
 # Options: cost wrt MOND: "dtw/"; cost wrt LCDM: "dtw/cost_vsLCDM/", original cost: "dtw/cost_vsVbar/".
 if use_DTW:
     # fname_DTW = fileloc + "dtw/cost_vsVbar/"
-    fname_DTW = fileloc + "dtw/"
+    fname_DTW = fileloc + "dtw/max_shift/"
     # print(f"fname_DTW = {fname_DTW}")
 num_samples = 1000   # No. of iterations sampling for uncertainties + errors.
 
@@ -71,6 +72,8 @@ def main(g, r, v_data, v_mock, num_samples=num_samples):
     res_percentiles = np.percentile(res_mock, [16.0, 84.0], axis=2)     # dim = (2, 3, r)
     res_errors = np.abs( res_percentiles - res_median )                 # dim = (2, 3, r)
 
+    # Vbar_errors.append(np.mean(res_errors[1,0])/np.max(v_data[1]))
+    
     # Labels and colours for plots.
     v_comps = [ "Vbar (SPARC)", "Vobs (MOND)", "Vobs (LCDM)", "Vobs (SPARC)" ]
     colours = [ 'tab:red', 'mediumblue', 'tab:green', 'k' ]
@@ -79,6 +82,14 @@ def main(g, r, v_data, v_mock, num_samples=num_samples):
     if len(lb)>0:
         print(f"\nFeature found in Vobs of {g}")
         print(f"Properties: lb={[x+5 for x in lb]}, rb={[x+5 for x in rb]}, widths={widths}")
+        if len(lb) == 2: g_doubleft.append(g)
+        else: g_features.append(g)
+
+        for i_ft in range(len(widths)):
+            print("Maximum normalized Vobs around feature =",
+                  np.max(np.abs( res_Vobs[ lb[i_ft]+5 : rb[i_ft]+5 ] / v_data[2][ lb[i_ft]+5 : rb[i_ft]+5 ] )))
+            print("Average normalized Vobs around feature =",
+                  np.average( np.abs(res_Vobs[ lb[i_ft]+5 : rb[i_ft]+5 ]) / v_data[2][ lb[i_ft]+5 : rb[i_ft]+5 ] ))
 
     lb, rb, widths = ft_check(res_data[0][5:], res_errors[1,0][5:])
     if len(lb)>0:
@@ -89,21 +100,21 @@ def main(g, r, v_data, v_mock, num_samples=num_samples):
     """
     Simple mean-squared error (MSE) relative to GP fits.
     """
-    def meansq_err( r, y_true, y_pred ):
-        if len(y_true) != len(y_pred):
-            raise RuntimeError(f"Length of y_true ({len(y_true)}) does not equal length of y_pred ({len(y_pred)})!")
-        return np.sum( (y_pred - y_true)**2 / len(r) )
+    # def meansq_err( r, y_true, y_pred ):
+    #     if len(y_true) != len(y_pred):
+    #         raise RuntimeError(f"Length of y_true ({len(y_true)}) does not equal length of y_pred ({len(y_pred)})!")
+    #     return np.sum( (y_pred - y_true)**2 / len(r) )
 
-    if use_MSE:
-        res_ref = np.zeros(len(r))
-        mse_data = meansq_err( r, res_Vobs, res_ref )
-        mse_MOND, mse_LCDM = [], []
-        for smp in range(num_samples):
-            mse_MOND.append( meansq_err(r, np.array(res_MOND)[:,smp], res_ref) )
-            mse_LCDM.append( meansq_err(r, np.array(res_LCDM)[:,smp], res_ref) )
-        mse_perc[0].append( mse_data )
-        mse_perc[1].append( np.percentile(mse_MOND, [16.0, 50.0, 84.0]) )
-        mse_perc[2].append( np.percentile(mse_LCDM, [16.0, 50.0, 84.0]) )
+    # if use_MSE:
+    #     res_ref = np.zeros(len(r))
+    #     mse_data = meansq_err( r, res_Vobs, res_ref )
+    #     mse_MOND, mse_LCDM = [], []
+    #     for smp in range(num_samples):
+    #         mse_MOND.append( meansq_err(r, np.array(res_MOND)[:,smp], res_ref) )
+    #         mse_LCDM.append( meansq_err(r, np.array(res_LCDM)[:,smp], res_ref) )
+    #     mse_perc[0].append( mse_data )
+    #     mse_perc[1].append( np.percentile(mse_MOND, [16.0, 50.0, 84.0]) )
+    #     mse_perc[2].append( np.percentile(mse_LCDM, [16.0, 50.0, 84.0]) )
 
 
     """
@@ -135,8 +146,8 @@ def main(g, r, v_data, v_mock, num_samples=num_samples):
                     #     dist_LCDM[n, m] = np.abs(res_LCDM[n][smp] - res_LCDM[m][smp])
                     # else:
                     dist_data[n, m] = np.abs(res_Vobs[n] - res_Vbar_data[m])
-                    dist_MOND[n, m] = np.abs(res_MOND[n][smp] - res_Vbar_data[m])
-                    dist_LCDM[n, m] = np.abs(res_LCDM[n][smp] - res_Vbar_data[m])
+                    dist_MOND[n, m] = np.abs(res_MOND[n][smp] - res_Vbar_mock[m][smp])
+                    dist_LCDM[n, m] = np.abs(res_LCDM[n][smp] - res_Vbar_mock[m][smp])
             
             dist_mats = np.array([ dist_data, dist_MOND, dist_LCDM ])
             mats_dir = [ "data/", "MOND/", "LCDM/" ]
@@ -175,21 +186,21 @@ def main(g, r, v_data, v_mock, num_samples=num_samples):
                     # elif fname_DTW == fileloc+"dtw/cost_vsLCDM/":
                     #     ref_curve = [ res_LCDM, "tab:green", r"$\Lambda$CDM" ]
                     # else:
-                    ref_curve = [ res_Vbar_data, "tab:red", "Vbar" ]
+                    ref_curve = [ res_Vbar_mock, "tab:red", "Vbar" ]
 
                     if j == 0:
-                        diff = abs(max(np.array(ref_curve[0])) - min(res_Vobs))
+                        diff = abs(max(res_Vbar_data) - min(res_Vobs))
                         for x_i, y_j in path:
-                            plt.plot([x_i, y_j], [res_Vobs[x_i] + diff, ref_curve[0][y_j] - diff], c="C7", alpha=0.4)
+                            plt.plot([x_i, y_j], [res_Vobs[x_i] + diff, res_Vbar_data[y_j] - diff], c="C7", alpha=0.4)
                         plt.plot(np.arange(len(r)), np.array(res_Vobs) + diff, c='k', label=v_comps[3])
 
                     else: 
-                        diff = abs(max(np.array(ref_curve[0])) - min(np.array(res_mock)[j,:,smp]))
+                        diff = abs(max(np.array(ref_curve[0])[:,smp]) - min(np.array(res_mock)[j,:,smp]))
                         for x_i, y_j in path:
-                            plt.plot([x_i, y_j], [res_mock[j][x_i][smp] + diff, ref_curve[0][y_j] - diff], c="C7", alpha=0.4)
+                            plt.plot([x_i, y_j], [res_mock[j][x_i][smp] + diff, ref_curve[0][y_j][smp] - diff], c="C7", alpha=0.4)
                         plt.plot(np.arange(len(r)), np.array(res_mock)[j,:,smp] + diff, c=colours[j], label=v_comps[j])
 
-                    plt.plot(np.arange(len(r)), np.array(ref_curve[0]) - diff, c=ref_curve[1], label=ref_curve[2])
+                    plt.plot(np.arange(len(r)), np.array(ref_curve[0])[:,smp] - diff, c=ref_curve[1], label=ref_curve[2])
                     plt.plot([], [], c='w', label="Alignment cost = {:.4f}".format(cost))
                     plt.plot([], [], c='w', label="Normalized cost = {:.4f}".format(cost/(len(r)*2)))
 
@@ -234,8 +245,8 @@ def main(g, r, v_data, v_mock, num_samples=num_samples):
 
         for smp in range(num_samples):
         # for smp in tqdm(range(num_samples), desc="Correlation by radii"):
-            if smp % 5:
-                continue
+            # if smp % 5:
+            #     continue
 
             # Interpolate the residuals with cubic Hermite spline splines.
             # v_d0, v_d1, v_d2 = [], [], []
@@ -578,7 +589,7 @@ if __name__ == "__main__":
         galaxy_count = 1
         galaxies = ['NGC6946']
     elif test_multiple:
-        galaxy_count = 5
+        galaxy_count = 17
         galaxies = galaxies[:galaxy_count]
     bulged_count = 0
     xbulge_count = 0
@@ -588,9 +599,12 @@ if __name__ == "__main__":
     dtw_cost = [ [], [], [] ]
     norm_cost = [ [], [], [] ]
     mse_perc = [ [], [], [] ]
+    g_features, g_doubleft = [], []
 
-    for i in range(galaxy_count):
-    # for i in tqdm(range(galaxy_count)):
+    Vbar_errors = []
+
+    # for i in range(galaxy_count):
+    for i in tqdm(range(galaxy_count)):
         g = galaxies[i]
         i_tab = np.where(table["Galaxy"] == g)[0][0]
 
@@ -604,6 +618,14 @@ if __name__ == "__main__":
 
         Vbar_squared = Vbar_sq_unc(table, i_tab, data, bulged, num_samples)
         # Vbar_squared = np.array([Vbar(data)] * num_samples).T
+
+        # Testing sampling of Vbar...
+        # if table["e_L"][i_tab] < 1e-6: print(f"{table['Galaxy'][i_tab]}: e_L = {table['e_L'][i_tab]}")
+        # if np.min(Vbar_squared) < 0:
+        #     print(f"\n{g}: {np.min(Vbar_squared)} km/s")
+        #     print(f"Properties: D = {table['D'][i_tab]}, e_D = {table['e_D'][i_tab]}, L = {table['L'][i_tab]}, e_L = {table['e_L'][i_tab]}")
+        # if i < galaxy_count - 1: continue
+        # else: raise Exception("Testing complete.")
 
         # full_MOND = MOND_unc(Vbar_squared)
         # full_LCDM = LCDM_unc(Vbar_squared, i_tab)
@@ -625,6 +647,7 @@ if __name__ == "__main__":
         # print("\nAnalyzing galaxy "+g+" ("+str(i+1)+"/60)")
         main(g, r, v_data, v_mock)
 
+    # print(f"Average Vbar errors = {np.mean(Vbar_errors)}")
     print("Max memory usage: %s (kb)" %getrusage(RUSAGE_SELF).ru_maxrss)
 
 
@@ -637,29 +660,29 @@ if __name__ == "__main__":
         """
         Plot histogram of MSE (in ascending order of data).
         """
-        if use_MSE:
-            mse_argsort = np.argsort( mse_perc[0] )
-            print(f"Galaxies in ascending order of mse(data): {np.array(galaxies)[mse_argsort]}")
+        # if use_MSE:
+        #     mse_argsort = np.argsort( mse_perc[0] )
+        #     print(f"Galaxies in ascending order of mse(data): {np.array(galaxies)[mse_argsort]}")
 
-            plt.title("Mean-squared errors relative to GP fits")
-            plt.ylabel("Mean-squared errors")
-            plt.xlabel("Galaxies")
+        #     plt.title("Mean-squared errors relative to GP fits")
+        #     plt.ylabel("Mean-squared errors")
+        #     plt.xlabel("Galaxies")
 
-            mse_MOND_perc, mse_LCDM_perc = np.array(mse_perc[1])[mse_argsort], np.array(mse_perc[2])[mse_argsort]
-            mse_MOND_errors = [ mse_MOND_perc[:,2] - mse_MOND_perc[:,1], mse_MOND_perc[:,1] - mse_MOND_perc[:,0] ]
-            mse_LCDM_errors = [ mse_LCDM_perc[:,2] - mse_LCDM_perc[:,1], mse_LCDM_perc[:,1] - mse_LCDM_perc[:,0] ]
+        #     mse_MOND_perc, mse_LCDM_perc = np.array(mse_perc[1])[mse_argsort], np.array(mse_perc[2])[mse_argsort]
+        #     mse_MOND_errors = [ mse_MOND_perc[:,2] - mse_MOND_perc[:,1], mse_MOND_perc[:,1] - mse_MOND_perc[:,0] ]
+        #     mse_LCDM_errors = [ mse_LCDM_perc[:,2] - mse_LCDM_perc[:,1], mse_LCDM_perc[:,1] - mse_LCDM_perc[:,0] ]
 
-            plt.bar(galaxies[mse_argsort], np.array(mse_perc[0])[mse_argsort], color='k', alpha=0.3, label="Data")
-            plt.errorbar(galaxies[mse_argsort], mse_MOND_perc[:,1], mse_MOND_errors, fmt='.', ls='none',
-                         capsize=2, color='mediumblue', alpha=0.5, label="MOND")
-            plt.errorbar(galaxies[mse_argsort], mse_LCDM_perc[:,1], mse_LCDM_errors, fmt='.', ls='none',
-                         capsize=2, color='tab:green', alpha=0.5, label=r"$\Lambda$CDM")
+        #     plt.bar(galaxies[mse_argsort], np.array(mse_perc[0])[mse_argsort], color='k', alpha=0.3, label="Data")
+        #     plt.errorbar(galaxies[mse_argsort], mse_MOND_perc[:,1], mse_MOND_errors, fmt='.', ls='none',
+        #                  capsize=2, color='mediumblue', alpha=0.5, label="MOND")
+        #     plt.errorbar(galaxies[mse_argsort], mse_LCDM_perc[:,1], mse_LCDM_errors, fmt='.', ls='none',
+        #                  capsize=2, color='tab:green', alpha=0.5, label=r"$\Lambda$CDM")
 
-            plt.legend()
-            plt.xticks([])
-            # plt.yscale('log')
-            plt.savefig(fileloc+"MSE.png", dpi=300, bbox_inches="tight")
-            plt.close()
+        #     plt.legend()
+        #     plt.xticks([])
+        #     # plt.yscale('log')
+        #     plt.savefig(fileloc+"MSE.png", dpi=300, bbox_inches="tight")
+        #     plt.close()
 
 
         """
@@ -676,9 +699,10 @@ if __name__ == "__main__":
 
             # Rearrange galaxies into ascending order in median of data normalised costs.
             sort_args = np.argsort(norm_percentiles[2][0])
+            sort_args = np.flip(sort_args)
             norm_percentiles = norm_percentiles[:, :, sort_args]
 
-            print(f"Galaxies in ascending order of cost(data): {np.array(galaxies)[sort_args]}")
+            print(f"Galaxies in descending order of cost(data): {np.array(galaxies)[sort_args]}")
 
             # Plot histogram of normalized DTW alignment costs of all galaxies.
             # if fname_DTW == fileloc+"dtw/cost_vsLCDM/": plt.title(r"Normalized DTW alignment costs (relative to $\Lambda$CDM)")
@@ -688,95 +712,112 @@ if __name__ == "__main__":
             hist_labels = [ "Data", "MOND", r"$\Lambda$CDM" ]
             colours = [ 'k', 'mediumblue', 'tab:green' ]
 
-            # if fname_DTW == fileloc+"dtw/cost_vsVbar/":
-            plt.bar(galaxies, norm_percentiles[2][0], color=colours[0], alpha=0.3, label=hist_labels[0])
+            fig, ax = plt.subplots()
+            fig.set_size_inches(10, 4)
 
-            for j in range(3):
+            # if fname_DTW == fileloc+"dtw/cost_vsVbar/":
+            ax.plot(galaxies[sort_args], norm_percentiles[2][0], color='k', label="Data")
+
+            for j in range(1, 3):
                 # if fname_DTW == fileloc+"dtw/":
                 #     if j == 1: continue     # Only plot values for data and LCDM since cost(MOND) == 0.
                 # elif fname_DTW == fileloc+"dtw/cost_vsLCDM/":
                 #     if j == 2: continue     # Only plot values for data and MOND since cost(LCDM) == 0.
-                mean_norm = np.nanmean(norm_percentiles[2][j])
+                # mean_norm = np.nanmean(norm_percentiles[2][j])
                 low_err = norm_percentiles[2][j] - norm_percentiles[1][j]
                 up_err = norm_percentiles[3][j] - norm_percentiles[2][j]
 
-                if j != 0:
-                    low_norm1 = np.full(galaxy_count, np.nanmean(norm_percentiles[1][j]))
-                    # low_norm2 = np.full(galaxy_count, np.nanmean(norm_percentiles[0][j]))
-                    up_norm1 = np.full(galaxy_count, np.nanmean(norm_percentiles[3][j]))
-                    # up_norm2 = np.full(galaxy_count, np.nanmean(norm_percentiles[4][j]))
-                    plt.fill_between(galaxies, low_norm1, up_norm1, color=colours[j], alpha=0.25)
-                    # plt.fill_between(galaxies, low_norm2, up_norm2, color=colours[j], alpha=0.1)
+                # if j != 0:
+                #     low_norm1 = np.full(galaxy_count, np.nanmean(norm_percentiles[1][j]))
+                #     # low_norm2 = np.full(galaxy_count, np.nanmean(norm_percentiles[0][j]))
+                #     up_norm1 = np.full(galaxy_count, np.nanmean(norm_percentiles[3][j]))
+                #     # up_norm2 = np.full(galaxy_count, np.nanmean(norm_percentiles[4][j]))
+                #     plt.fill_between(galaxies, low_norm1, up_norm1, color=colours[j], alpha=0.25)
+                #     # plt.fill_between(galaxies, low_norm2, up_norm2, color=colours[j], alpha=0.1)
 
-                plt.axhline(y=mean_norm, color=colours[j], linestyle='dashed', label="Mean = {:.4f}".format(mean_norm))
+                # plt.axhline(y=mean_norm, color=colours[j], linestyle='dashed', label="Mean = {:.4f}".format(mean_norm))
                 # if not(fname_DTW == fileloc+"dtw/cost_vsVbar/" and j == 0):
-                if j != 0:
-                    plt.errorbar(galaxies, norm_percentiles[2][j], [low_err, up_err], fmt='.', ls='none',
-                                capsize=2, color=colours[j], alpha=0.5, label=hist_labels[j])
+                if j == 1: trans = Affine2D().translate(-0.1, 0.0) + ax.transData
+                else: trans = Affine2D().translate(+0.1, 0.0) + ax.transData
+                ax.errorbar(galaxies[sort_args], norm_percentiles[2][j], [low_err, up_err], fmt='.', ls='none',
+                            capsize=2, color=colours[j], alpha=0.7, transform=trans, label=hist_labels[j])
                             
-            plt.legend()
-            plt.xticks([])
-            plt.savefig(fname_DTW+"histo1.png", dpi=300, bbox_inches="tight")
+            # ax.legend()
+            # ax.set_xticks([])
+
+            # Only label galaxy with at least one ft in Vobs (bold if 2x ft).
+            new_labels = []
+            for ele in ax.get_xticklabels():
+                if ele.get_text() in g_doubleft:
+                    ele.set_fontweight('bold')
+                    new_labels.append(ele.get_text())
+                elif ele.get_text() in g_features: new_labels.append(ele.get_text())
+                else: new_labels.append("")
+            ax.set_xticklabels(new_labels, rotation=45, ha='right', fontsize=7)
+
+            ax.set_xlabel("Galaxies")
+            ax.set_ylabel("Normalized DTW cost")
+            fig.savefig(fname_DTW+"dtw_summary.pdf", dpi=300, bbox_inches="tight")
             plt.close()
 
 
             """
             Scatter plots of cost(mock) against cost(data).
             """
-            plotloc = [ "MOND", "LCDM" ]
-            for j in range(1, 3):
-                plt.title("Scatter plot: cost("+hist_labels[j]+") vs cost(data)")
-                low_err = norm_percentiles[2][j] - norm_percentiles[1][j]
-                up_err = norm_percentiles[3][j] - norm_percentiles[2][j]
+            # plotloc = [ "MOND", "LCDM" ]
+            # for j in range(1, 3):
+            #     plt.title("Scatter plot: cost("+hist_labels[j]+") vs cost(data)")
+            #     low_err = norm_percentiles[2][j] - norm_percentiles[1][j]
+            #     up_err = norm_percentiles[3][j] - norm_percentiles[2][j]
 
-                plt.xlabel("Cost(Data)")
-                plt.ylabel("Cost("+hist_labels[j]+")")
-                plt.errorbar(norm_percentiles[2][0], norm_percentiles[2][j], [low_err, up_err], fmt='.', ls='none', capsize=2, color=colours[j], alpha=0.5, label=hist_labels[j])
+            #     plt.xlabel("Cost(Data)")
+            #     plt.ylabel("Cost("+hist_labels[j]+")")
+            #     plt.errorbar(norm_percentiles[2][0], norm_percentiles[2][j], [low_err, up_err], fmt='.', ls='none', capsize=2, color=colours[j], alpha=0.5, label=hist_labels[j])
             
-                plt.legend()
-                plt.savefig(fname_DTW+"scatter_"+plotloc[j-1]+".png", dpi=300, bbox_inches="tight")
-                plt.close()
+            #     plt.legend()
+            #     plt.savefig(fname_DTW+"scatter_"+plotloc[j-1]+".png", dpi=300, bbox_inches="tight")
+            #     plt.close()
 
 
             """
             Plot histogram of differences in normalized DTW costs (mock - data, in ascending order of costs for MOND - data).
             """
-            # Rearrange galaxies into ascending order in cost_diff(MOND).
-            cost_diff = np.array([norm_cost[1] - norm_cost[0], norm_cost[2] - norm_cost[0]])
+            # # Rearrange galaxies into ascending order in cost_diff(MOND).
+            # cost_diff = np.array([norm_cost[1] - norm_cost[0], norm_cost[2] - norm_cost[0]])
 
-            # Arrays of shape (5 x percentiles, 2 x v_comps, galaxy_count).
-            diff_perc = np.percentile(cost_diff, [5.0, 16.0, 50.0, 84.0, 95.0], axis=2)
+            # # Arrays of shape (5 x percentiles, 2 x v_comps, galaxy_count).
+            # diff_perc = np.percentile(cost_diff, [5.0, 16.0, 50.0, 84.0, 95.0], axis=2)
 
-            # Sort by descending order in difference between (LCDM - data).
-            sort_args = np.argsort(diff_perc[2][1])[::-1]
-            diff_percentiles = diff_perc[:, :, sort_args]
+            # # Sort by descending order in difference between (LCDM - data).
+            # sort_args = np.argsort(diff_perc[2][1])[::-1]
+            # diff_percentiles = diff_perc[:, :, sort_args]
 
-            print(f"Galaxies in descending order of cost(LCDM) - cost(data): {np.array(galaxies)[sort_args]}")
+            # print(f"Galaxies in descending order of cost(LCDM) - cost(data): {np.array(galaxies)[sort_args]}")
 
-            # Plot histogram of normalized DTW alignment costs of all galaxies.
-            plt.title("Normalised cost differences (mock - real data)")
-            hist_labels = [ "MOND", r"$\Lambda$CDM" ]
-            colours = [ 'mediumblue', 'tab:green' ]
+            # # Plot histogram of normalized DTW alignment costs of all galaxies.
+            # plt.title("Normalised cost differences (mock - real data)")
+            # hist_labels = [ "MOND", r"$\Lambda$CDM" ]
+            # colours = [ 'mediumblue', 'tab:green' ]
 
-            for j in range(2):          
-                mean_diff = np.nanmean(diff_percentiles[2][j])
-                low_err = diff_percentiles[2][j] - diff_percentiles[1][j]
-                up_err = diff_percentiles[3][j] - diff_percentiles[2][j]
+            # for j in range(2):          
+            #     mean_diff = np.nanmean(diff_percentiles[2][j])
+            #     low_err = diff_percentiles[2][j] - diff_percentiles[1][j]
+            #     up_err = diff_percentiles[3][j] - diff_percentiles[2][j]
 
-                low_norm1 = np.full(galaxy_count, np.nanmean(diff_percentiles[1][j]))
-                # low_norm2 = np.full(galaxy_count, np.nanmean(diff_percentiles[0][j]))
-                up_norm1 = np.full(galaxy_count, np.nanmean(diff_percentiles[3][j]))
-                # up_norm2 = np.full(galaxy_count, np.nanmean(diff_percentiles[4][j]))
+            #     low_norm1 = np.full(galaxy_count, np.nanmean(diff_percentiles[1][j]))
+            #     # low_norm2 = np.full(galaxy_count, np.nanmean(diff_percentiles[0][j]))
+            #     up_norm1 = np.full(galaxy_count, np.nanmean(diff_percentiles[3][j]))
+            #     # up_norm2 = np.full(galaxy_count, np.nanmean(diff_percentiles[4][j]))
 
-                plt.errorbar(galaxies, diff_percentiles[2][j], [low_err, up_err], fmt='.', ls='none', capsize=2, color=colours[j], alpha=0.5, label=hist_labels[j])
-                plt.axhline(y=mean_diff, color=colours[j], linestyle='dashed', label="Mean = {:.4f}".format(mean_diff))
-                plt.fill_between(galaxies, low_norm1, up_norm1, color=colours[j], alpha=0.25)
-                # plt.fill_between(galaxies, low_norm2, up_norm2, color=colours[j], alpha=0.1)
+            #     plt.errorbar(galaxies, diff_percentiles[2][j], [low_err, up_err], fmt='.', ls='none', capsize=2, color=colours[j], alpha=0.5, label=hist_labels[j])
+            #     plt.axhline(y=mean_diff, color=colours[j], linestyle='dashed', label="Mean = {:.4f}".format(mean_diff))
+            #     plt.fill_between(galaxies, low_norm1, up_norm1, color=colours[j], alpha=0.25)
+            #     # plt.fill_between(galaxies, low_norm2, up_norm2, color=colours[j], alpha=0.1)
             
-            plt.legend()
-            plt.xticks([])
-            plt.savefig(fname_DTW+"histo2.png", dpi=300, bbox_inches="tight")
-            plt.close()
+            # plt.legend()
+            # plt.xticks([])
+            # plt.savefig(fname_DTW+"histo2.png", dpi=300, bbox_inches="tight")
+            # plt.close()
 
         """
         Plot histogram of Spearman coefficients across RC (in ascending order of coefficients for data).
@@ -815,31 +856,55 @@ if __name__ == "__main__":
             """Pearson histogram"""
             # Rearrange galaxies into ascending order in median of corr(MOND, Vbar).
             # dim = (# of galaxies, 2 x mock_vcomps, 3 x percentiles)
-            mock_sorted = np.array(sorted(pearson_mock, key=lambda x: x[0][0]))
+            # mock_sorted = np.array(sorted(pearson_mock, key=lambda x: x[0][0]))
+            sort_args = np.argsort(pearson_data)
+            # galaxies = galaxies[sort_args]
+            pearson_data = np.array(pearson_data)[sort_args]
+            mock_sorted = np.array(pearson_mock)[sort_args]
 
-            plt.title("Pearson coefficients across RC")
+            # plt.title("Pearson coefficients across RC")
             hist_labels = [ "Data", "MOND", r"$\Lambda$CDM" ]
             colours = [ 'k', 'mediumblue', 'tab:green' ]
 
-            mean_corr = np.nanmean(pearson_data)
-            plt.bar(galaxies, sorted(pearson_data), color=colours[0], alpha=0.3, label=hist_labels[0])
-            plt.axhline(y=mean_corr, color=colours[0], linestyle='dashed', label="Mean = {:.4f}".format(mean_corr))
+            fig, ax = plt.subplots()
+            fig.set_size_inches(10, 4)
+
+            # mean_corr = np.nanmean(pearson_data)
+            # plt.bar(galaxies, sorted(pearson_data), color=colours[0], alpha=0.3, label=hist_labels[0])
+            # plt.axhline(y=mean_corr, color=colours[0], linestyle='dashed', label="Mean = {:.4f}".format(mean_corr))
+            ax.plot(galaxies[sort_args], pearson_data, color='k', label="Data")
 
             for j in range(2):
-                med_corr = np.nanmean(mock_sorted[:,j,1])
+                # med_corr = np.nanmean(mock_sorted[:,j,1])
                 low_err = mock_sorted[:,j,1] - mock_sorted[:,j,0]
                 up_err = mock_sorted[:,j,2] - mock_sorted[:,j,1]
 
-                low_norm1 = np.full(galaxy_count, np.nanmean(mock_sorted[:,j,2]))
-                up_norm1 = np.full(galaxy_count, np.nanmean(mock_sorted[:,j,0]))
+                # low_norm1 = np.full(galaxy_count, np.nanmean(mock_sorted[:,j,2]))
+                # up_norm1 = np.full(galaxy_count, np.nanmean(mock_sorted[:,j,0]))
 
-                plt.errorbar(galaxies, mock_sorted[:,j,1], [low_err, up_err], fmt='.', ls='none', capsize=2, color=colours[j+1], alpha=0.5, label=hist_labels[j+1])
-                plt.axhline(y=med_corr, color=colours[j+1], linestyle='dashed', label="Mean = {:.4f}".format(med_corr))
-                plt.fill_between(galaxies, low_norm1, up_norm1, color=colours[j+1], alpha=0.25)
+                if j == 1: trans = Affine2D().translate(-0.1, 0.0) + ax.transData
+                else: trans = Affine2D().translate(+0.1, 0.0) + ax.transData
+                ax.errorbar(galaxies[sort_args], mock_sorted[:,j,1], [low_err, up_err], fmt='.', transform=trans,
+                            ls='none', capsize=2, color=colours[j+1], alpha=0.7, label=hist_labels[j+1])
+                # plt.axhline(y=med_corr, color=colours[j+1], linestyle='dashed', label="Mean = {:.4f}".format(med_corr))
+                # plt.fill_between(galaxies, low_norm1, up_norm1, color=colours[j+1], alpha=0.25)
             
-            plt.legend()
-            plt.xticks([])
-            plt.savefig(fileloc+"correlations/histo1.png", dpi=300, bbox_inches="tight")
+            ax.legend()
+            # ax.set_xticks([])
+
+            # Only label galaxy with at least one ft in Vobs (bold if 2x ft).
+            new_labels = []
+            for ele in ax.get_xticklabels():
+                if ele.get_text() in g_doubleft:
+                    ele.set_fontweight('bold')
+                    new_labels.append(ele.get_text())
+                elif ele.get_text() in g_features: new_labels.append(ele.get_text())
+                else: new_labels.append("")
+            ax.set_xticklabels(new_labels, rotation=45, ha='right', fontsize=7)
+
+            # ax.set_xlabel("Galaxies")
+            ax.set_ylabel("Pearson coefficient")
+            fig.savefig(fileloc+"pearson_summary.pdf", dpi=300, bbox_inches="tight")
             plt.close()
 
     print("Max memory usage: %s (kb)" %getrusage(RUSAGE_SELF).ru_maxrss)
