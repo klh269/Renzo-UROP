@@ -13,7 +13,7 @@ Compare the normalised alginment cost to get a handle of correlation.
 
 **Yet to account for errors/uncertainties, crucial for meaningful comparison/interpretation!
 """
-import jax.experimental
+# import jax.experimental
 import pandas as pd
 import argparse
 from resource import getrusage, RUSAGE_SELF
@@ -34,11 +34,12 @@ import numpyro
 from tqdm import tqdm
 from utils_analysis.gp_utils import model, predict, run_inference
 from utils_analysis.dtw_utils import dtw
+from utils_analysis.extract_ft import ft_check
 
 matplotlib.use("Agg")  # noqa: E402
 
 
-testing = False      # Only analyze NGC0024.
+testing = False
 test_multiple = False   # Loops over the first handful of galaxies instead of just the fist one (DDO161).
 make_plots = True
 do_DTW = False
@@ -48,7 +49,7 @@ fileloc = "/mnt/users/koe/plots/combined_dtw/"
 
 
 # Main code to run.
-def main(args, g, X, Y, X_test, ls): 
+def main(args, g, X, Y, X_test, ls, SPARC_features):
     """
     Do inference for Vbar with uniform prior for correlation length,
     then apply the resulted lengthscale to Vobs (both real and mock data).
@@ -57,51 +58,8 @@ def main(args, g, X, Y, X_test, ls):
     colours = [ 'tab:red', 'k', 'mediumblue', 'tab:green' ]
     corner_dir = [ "Vbar/", "Vobs_data/", "Vobs_MOND/", "Vobs_LCDM/" ]
 
-    # print(f"Fitting function to {v_comps[1]} with correlation length = {ls}...")
-    # rng_key, rng_key_predict = random.split(random.PRNGKey(0))
-    # samples = run_inference(model, args, rng_key, X, Y[1])
-
-    # # do prediction
-    # vmap_args = (
-    #     random.split(rng_key_predict, samples["var"].shape[0]),
-    #     samples["var"],
-    #     samples["noise"],
-    # )
-    # means, predictions = vmap(
-    #     lambda rng_key, var, noise: predict(
-    #         rng_key, X, Y[1], X_test, var, ls, noise, use_cholesky=args.use_cholesky
-    #     )
-    # )(*vmap_args)
-
-    # mean_pred = np.mean(means, axis=0)
-    # gp_predictions[1] = mean_pred
-
-    # confidence_band = np.percentile(predictions, [16.0, 84.0], axis=0)
-    # gp_16percent[1] = confidence_band[0]
-    # gp_84percent[1] = confidence_band[1]
-
-    # if make_plots:
-    #     labels = ["var", "noise"]
-    #     samples_arr = np.vstack([samples[label] for label in labels]).T
-    #     fig = corner.corner(samples_arr, show_titles=True, labels=labels, title_fmt=".3f", quantiles=[0.16, 0.5, 0.84], smooth=1)
-    #     fig.savefig(fileloc+"corner_plots/"+corner_dir[1]+g+".png", dpi=300, bbox_inches="tight")
-    #     plt.close(fig)
-
-    # GP on Vobs with fixed hyperparameters from Vbar.
-    # vr = stats.mode(np.round(samples["var"], 0))[0]
-    # vr = np.median(samples["var"])
-    # print(f"var MAP = {vr}")
-    # ls = stats.mode(np.round(samples["length"], 2))[0]
-    # ls = np.median(samples["length"])
-    # ls_ALL.append(ls)
-    # print(f"length MAP = {ls}")
-    # ns = stats.mode(np.round(samples["noise"], 1))[0]
-    # ns = np.median(samples["noise"])
-    # print(f"noise MAP = {ns}")
-
     # print(f"\nFitting function to each RC with ls = {ls}...")
     for j in range(4):
-        # print("\nFitting function to " + v_comps[j] + " with length = " + str(round(ls, 2)) + "...")
         rng_key, rng_key_predict = random.split(random.PRNGKey(0))
         samples = run_inference(model, args, rng_key, X, Y[j], ls=ls)
 
@@ -111,6 +69,29 @@ def main(args, g, X, Y, X_test, ls):
             samples["var"],
             samples["noise"],
         )
+
+        # Remove features in galaxies (if any) for GPR (doesn't quite work...)
+        # if g in SPARC_features:
+        #     left_bases = SPARC_features[g][0]
+        #     right_bases = SPARC_features[g][1]
+
+        #     lb, rb = left_bases[-1], right_bases[-1]
+        #     X_Xft = np.delete(X, np.s_[lb:rb], axis=0)
+        #     Y_Xft = np.delete(Y[j], np.s_[lb:rb], axis=0)
+        #     if len(left_bases) == 2:
+        #         lb, rb = left_bases[-2], right_bases[-2]
+        #         X_Xft = np.delete(X_Xft, np.s_[lb:rb], axis=0)
+        #         Y_Xft = np.delete(Y_Xft, np.s_[lb:rb], axis=0)
+        #     elif len(left_bases) >= 3:
+        #         raise ValueError("More than 2 features detected in galaxy "+g+"?")
+
+        #     means, predictions = vmap(
+        #         lambda rng_key, var, noise: predict(
+        #             rng_key, X_Xft, Y_Xft, rad, var, ls, noise, use_cholesky=args.use_cholesky
+        #         )
+        #     )(*vmap_args)
+
+        # else:
         means, predictions = vmap(
             lambda rng_key, var, noise: predict(
                 rng_key, X, Y[j], X_test, var, ls, noise, use_cholesky=args.use_cholesky
@@ -150,8 +131,8 @@ def main(args, g, X, Y, X_test, ls):
             ax0.set_ylabel("Velocities (km/s)")
 
             for j in range(4):
-                # Scatter plot for data/mock data points.
-                ax0.scatter(X, Y[j], color=colours[j], alpha=0.3, label=v_comps[j])
+                if j == 1: ax0.errorbar(X, Y[j], yerr=Y[4], fmt='o', capsize=2, ls='none', color=colours[j], alpha=0.3, label=v_comps[j])
+                else: ax0.scatter(X, Y[j], color=colours[j], alpha=0.3, label=v_comps[j])
                 # Plot mean prediction from GP.
                 ax0.plot(X_test, gp_predictions[j], color=colours[j])
                 # Fill in 1-sigma (68%) confidence band of GP fit.
@@ -162,7 +143,7 @@ def main(args, g, X, Y, X_test, ls):
 
             ax1.set_ylabel("Residuals (km/s)")
             for j in range(4):
-                ax1.plot(r, residuals[j], 'o-', color=colours[j], alpha=0.45)
+                ax1.plot(r[2:], residuals[j, 2:], 'o-', color=colours[j], alpha=0.45)
             ax1.grid()
 
             plt.subplots_adjust(hspace=0.05)
@@ -578,7 +559,7 @@ if __name__ == "__main__":
         if test_multiple:
             galaxy_count = 13   # First 2 galaxies.
         else:
-            galaxy_count = 1    # Test on NGC 6946.
+            galaxy_count = 1
     bulged_count = 0
     xbulge_count = 0
     
@@ -589,8 +570,7 @@ if __name__ == "__main__":
     for i in tqdm(range(galaxy_count), desc="SPARC galaxies"):
     # for i in range(galaxy_count):
         if testing and not test_multiple:
-            # i = 91  # NGC6946
-            i = 32  # NGC0024
+            i = np.where(table["Galaxy"] == "UGC02953")[0][0]
 
         g = table["Galaxy"][i]
             
@@ -618,7 +598,7 @@ if __name__ == "__main__":
 
         # Normalise velocities by Vmax = max(Vobs) from SPARC data.
         v_LCDM = np.sqrt(Vbar(data)**2 + np.array(v_DM[i])**2)
-        v_components = np.array([ Vbar(data), data["Vobs"], MOND_Vobs(data), v_LCDM ])
+        v_components = np.array([ Vbar(data), data["Vobs"], MOND_Vobs(data), v_LCDM, data["errV"] ])
         # Vmax = max(v_components[1])
         # v_components /= Vmax
 
@@ -644,7 +624,9 @@ if __name__ == "__main__":
         ls_dict = np.load("/mnt/users/koe/gp_fits/ls_dict.npy", allow_pickle=True).item()
         ls = ls_dict[g]
 
-        main(args, g, X, v_components, X_test, ls)
+        SPARC_features = np.load("/mnt/users/koe/gp_fits/SPARC_features.npy", allow_pickle=True).item()
+
+        main(args, g, X, v_components, X_test, ls, SPARC_features)
 
         # print("\nMemory usage: %s (kb)" %getrusage(RUSAGE_SELF).ru_maxrss)
         jax.clear_caches()    # One-line attempt to solve the JIT memory allocation problem.
