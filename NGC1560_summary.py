@@ -15,10 +15,10 @@ names = [ "Gentile et al. (window)", "Sanders (window)", "Gentile et al.", "Sand
 colours = [ "mediumblue", "tab:green" ]
 labels = [ "MOND", r"$\Lambda$CDM" ]
 
-pearson_data = [ 0.89, 0.98, 0.60, 0.82 ]
-pearson_med = np.array([ [0.74, 0.30], [0.81, 0.43], [0.50, 0.18], [0.57, 0.22] ])
-pearson_err = np.array([ [ [0.08, 0.11], [0.21, 0.23] ], [ [0.13, 0.22], [0.36, 0.55] ],
-                         [ [0.09, 0.09], [0.11, 0.12] ], [ [0.10, 0.13], [0.19, 0.23] ] ])
+pearson_data = [ 0.89, 0.986, 0.61, 0.82 ]
+pearson_med = np.array([ [0.71, 0.23], [0.915, 0.50], [0.55, 0.20], [0.73, 0.24] ])
+pearson_err = np.array([ [ [0.08, 0.09], [0.16, 0.16] ], [ [0.05, 0.08], [0.24, 0.25] ],
+                         [ [0.08, 0.08], [0.11, 0.11] ], [ [0.06, 0.08], [0.12, 0.14] ] ])
 
 ax[0].scatter( pearson_data, names, c="tab:red", marker='x' )
 for i in range(2): 
