@@ -17,9 +17,9 @@ from scipy import stats
 from utils_analysis.dtw_utils import dtw
 from utils_analysis.mock_gen import Vobs_scat
 from utils_analysis.extract_ft import ft_check
-from tqdm import tqdm
+# from tqdm import tqdm
 
-plt.rcParams.update({'font.size': 13})
+plt.rcParams.update({'font.size': 14})
 
 
 testing = False
@@ -27,11 +27,11 @@ make_plots = True
 use_DTW = True
 do_correlations = True
 
-fileloc = "/mnt/users/koe/plots/Santos-Santos/with_errV/"
+fileloc = "/mnt/users/koe/plots/Santos-Santos/NGC1560_errV/"    # Set to: /SPARC_errV/ or /NGC1560_errV/.
 if use_DTW: fname_DTW = fileloc + "dtw/"
 
 num_samples = 1000
-SPARC_avg_errV = 0.05   # Average error in Vobs from SPARC data (x Vmax).
+avg_errV = 0.02   # Average error (x Vmax) in Vobs data (SPARC: 0.05, Sanders NGC 1560: 0.02).
 
 
 # Main code to run.
@@ -74,11 +74,12 @@ def main(g, r, velocities, errV, num_samples=num_samples):
     res_mock_percentiles = np.percentile(res_mock, [16.0, 84.0], axis=2)    # dim = (2 (perc), 2 (v_comp), r)
 
     # Labels and colours for plots.
-    v_comps = [ r"$v_{bar}$", r"$v_{obs}$", r"$v_{MOND}$", r"$v_{\Lambda CDM}$" ]
+    v_comps = [ r"$V_{bar}$", r"$V_{obs}$", r"$V_{MOND}$", r"$V_{\Lambda CDM}$" ]
     colours = [ 'tab:red', 'k', 'mediumblue', 'tab:green' ]
 
     ft_Vobs, ft_Vbar = 0, 0
-    for smp in tqdm(range(num_samples), desc="Checking for features"):
+    for smp in range(num_samples):
+    # for smp in tqdm(range(num_samples), desc="Checking for features"):
         lb, _, _ = ft_check(res_Vbar[5:,smp], errV[5:])
         # lb, rb, widths = ft_check(res_data[0,5:,smp], res_errors[1,0,5:])
         if len(lb)>0:
@@ -104,8 +105,9 @@ def main(g, r, velocities, errV, num_samples=num_samples):
         dtw_cost_smp = [ [], [], [] ]
         norm_cost_smp = [ [], [], [] ]
 
-        # for smp in range(num_samples):
-        for smp in tqdm(range(num_samples), desc="DTW"):
+        print("Warping time dynamically, kinda...")
+        for smp in range(num_samples):
+        # for smp in tqdm(range(num_samples), desc="DTW"):
             # Construct distance matrices.
             dist_data = np.zeros((len(r), len(r)))
             dist_MOND = np.copy(dist_data)
@@ -182,8 +184,9 @@ def main(g, r, velocities, errV, num_samples=num_samples):
         # Compute correlation coefficients for mock Vobs vs Vbar.
         corr_data, corr_mock = [], []   # dim = (num_samples/10, 2 x mock_vcomps, 2 x rho, rad)
 
-        # for smp in range(num_samples):
-        for smp in tqdm(range(num_samples), desc="Correlation by radii"):
+        print("Correlating by radii...")
+        for smp in range(num_samples):
+        # for smp in tqdm(range(num_samples), desc="Correlation by radii"):
             correlations_data= []
             for j in range(3, len(r)+1):
                 correlations_data.append(stats.pearsonr(res_Vbar[:j,smp], res_Vobs[:j,smp])[0])
@@ -292,7 +295,7 @@ if __name__ == "__main__":
         rawdata = np.loadtxt(file_path)
         data = pd.DataFrame(rawdata, columns=columns)
         r = data["Rad"].to_numpy()
-        errV = np.full(len(r), SPARC_avg_errV * max(data["Vobs"]))
+        errV = np.full(len(r), avg_errV * max(data["Vobs"]))
 
         MCMC_fits = np.load(f"/mnt/users/koe/MCMC_fits/Santos-Santos/{g}.npy")
         Vbar = np.array([data["Vbar"]] * num_samples).T
@@ -300,12 +303,12 @@ if __name__ == "__main__":
         v_MOND = np.array([MCMC_fits[0]] * num_samples).T
         v_LCDM = np.array([MCMC_fits[1]] * num_samples).T
 
-        full_Vbar = Vobs_scat(Vbar, errV, num_samples)
+        # full_Vbar = Vobs_scat(Vbar, errV, num_samples)
         full_Vobs = Vobs_scat(Vobs, errV, num_samples)
         full_MOND = Vobs_scat(v_MOND, errV, num_samples)
         full_LCDM = Vobs_scat(v_LCDM, errV, num_samples)
 
-        velocities = np.array([ full_Vbar, full_Vobs, full_MOND, full_LCDM ])
+        velocities = np.array([ Vbar, full_Vobs, full_MOND, full_LCDM ])
 
         print(f"\nAnalyzing galaxy: {g} ({i+1}/{galaxy_count})")
         main(g, r, velocities, errV)
@@ -319,6 +322,9 @@ if __name__ == "__main__":
     --------------
     """
     if make_plots and not testing:
+        g_features = [ "g15807_Irr", "g15784_Irr", "g1536_MW", "g5664_MW", "C1", "C5", "C6", "C7", "C8" ]
+        g_CLUES = [ "C1", "C2", "C3", "C4", "C5", "C6", "C7", "C8", "C9", "C10" ]
+
         """
         Plot histogram of normalized DTW costs (in ascending order of costs for data).
         """
@@ -339,7 +345,11 @@ if __name__ == "__main__":
 
             # Load sorted arrays and indices from Santos-Santos.py (original analysis w/o errors).
             sort_args = np.load("/mnt/users/koe/Santos-analysis/dtw_args.npy")
+            sort_args = np.flip(sort_args)
             costs_sorted = np.load("/mnt/users/koe/Santos-analysis/dtw.npy")
+            costs_sorted = np.flip(costs_sorted, axis=1)
+
+            norm_percentiles = norm_percentiles[:,:,sort_args]
 
             print(f"Galaxies in ascending order of cost(data): {np.array(galaxies)[sort_args]}")
 
@@ -348,10 +358,10 @@ if __name__ == "__main__":
 
             fig, ax = plt.subplots()
             # ax.bar(galaxies, norm_percentiles[1][0], color=colours[0], alpha=0.3, label=hist_labels[0])
-
+            for j in range(3): ax.plot(galaxies[sort_args], costs_sorted[j], color=colours[j], label=hist_labels[j])
+            
+            ax1 = ax.twinx()
             for j in range(3):
-                ax.plot(galaxies, costs_sorted[j], color=colours[j], label=hist_labels[j])
-
                 # mean_norm = np.nanmean(norm_percentiles[1][j])
                 low_err = norm_percentiles[1][j] - norm_percentiles[0][j]
                 up_err = norm_percentiles[2][j] - norm_percentiles[1][j]
@@ -362,17 +372,26 @@ if __name__ == "__main__":
                     # ax.fill_between(galaxies, low_norm1, up_norm1, color=colours[j], alpha=0.25)
 
                 # ax.axhline(y=mean_norm, color=colours[j], linestyle='dashed', label="Mean = {:.4f}".format(mean_norm))
-                if j == 0: trans = Affine2D().translate(-0.15, 0.0) + ax.transData
-                elif j == 2: trans = Affine2D().translate(+0.15, 0.0) + ax.transData
-                else: trans = ax.transData
-                ax.errorbar(galaxies, norm_percentiles[1][j], [low_err, up_err], fmt='.', ls='none',
-                             capsize=2, color=colours[j], alpha=0.5, transform=trans)
+                if j == 0: trans = Affine2D().translate(-0.15, 0.0) + ax1.transData
+                elif j == 2: trans = Affine2D().translate(+0.15, 0.0) + ax1.transData
+                else: trans = ax1.transData
+                ax1.errorbar(galaxies[sort_args], norm_percentiles[1][j], [low_err, up_err], fmt='.', ls='none',
+                             capsize=2, color=colours[j], alpha=0.7, transform=trans)
                             
-            ax.legend()
-            ax.set_xticks([])
+            # ax.legend()
+            # ax.set_xticks([])
+
+            # Bold galaxies with features identified by authors + label CLUES galaxies in red.
+            for ele in ax.get_xticklabels():
+                if ele.get_text() in g_CLUES: ele.set_color('tab:red')
+                if ele.get_text() in g_features: ele.set_fontweight('bold')
+            ax.set_xticklabels(ax.get_xticklabels(), rotation=45, ha='right', fontsize=10)
+
             ax.set_xlabel("Galaxies")
-            ax.set_ylabel("Normalized DTW cost")
-            fig.savefig(fname_DTW+"histo1.png", dpi=300, bbox_inches="tight")
+            ax.set_ylabel("DTW cost (no noise, solid lines)")
+            ax1.set_ylabel("DTW cost w/ noise (error bars)")
+
+            fig.savefig(fname_DTW+"histo1.pdf", dpi=300, bbox_inches="tight")
             plt.close()
 
 
@@ -460,10 +479,10 @@ if __name__ == "__main__":
 
             for j in range(3):
                 mean_corr = np.mean(pearson_sorted[j])
-                ax.plot(galaxies, pearson_sorted[j], color=colours[j], label=hist_labels[j])
+                ax.plot(galaxies[sort_args], pearson_sorted[j], color=colours[j], label=hist_labels[j])
 
             trans = Affine2D().translate(-0.15, 0.0) + ax.transData
-            ax.errorbar(galaxies, data_sorted[:,1], [data_sorted[:,1] - data_sorted[:,0], data_sorted[:,2] - data_sorted[:,1]],
+            ax.errorbar(galaxies[sort_args], data_sorted[:,1], [data_sorted[:,1] - data_sorted[:,0], data_sorted[:,2] - data_sorted[:,1]],
                         fmt='.', ls='none', capsize=2, color=colours[0], alpha=0.7, transform=trans)
 
             for j in range(2):
@@ -476,15 +495,22 @@ if __name__ == "__main__":
 
                 if j == 1: trans = Affine2D().translate(+0.15, 0.0) + ax.transData
                 else: trans = ax.transData
-                ax.errorbar(galaxies, mock_sorted[:,j,1], [low_err, up_err], fmt='.', ls='none', capsize=2, color=colours[j+1], alpha=0.7, transform=trans)
+                ax.errorbar(galaxies[sort_args], mock_sorted[:,j,1], [low_err, up_err], fmt='.', ls='none', capsize=2, color=colours[j+1], alpha=0.7, transform=trans)
                 # plt.axhline(y=med_corr, color=colours[j+1], linestyle='dashed', label="Mean = {:.4f}".format(med_corr))
                 # plt.fill_between(galaxies, low_norm1, up_norm1, color=colours[j+1], alpha=0.25)
             
             ax.legend()
-            ax.set_xticks([])
+            # ax.set_xticks([])
+
+            # Bold galaxies with features identified by authors + label CLUES galaxies in red.
+            for ele in ax.get_xticklabels():
+                if ele.get_text() in g_CLUES: ele.set_color('tab:red')
+                if ele.get_text() in g_features: ele.set_fontweight('bold')
+            ax.set_xticklabels(ax.get_xticklabels(), rotation=45, ha='right', fontsize=10)
+
             ax.set_xlabel("Galaxies")
             ax.set_ylabel("Pearson coefficient")
-            fig.savefig(fileloc+"correlations/histo1.png", dpi=300, bbox_inches="tight")
+            fig.savefig(fileloc+"correlations/histo1.pdf", dpi=300, bbox_inches="tight")
             plt.close()
 
     print("Max memory usage: %s (kb)" %getrusage(RUSAGE_SELF).ru_maxrss)
