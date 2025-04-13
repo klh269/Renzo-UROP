@@ -7,6 +7,7 @@ to better understand the effect/restriction of sampling rates, feature sizes and
 
 To run this as a for-loop in bash:
 for i in {0..29}; do addqueue -q cmb -c "1-3 days" -n 1 -m 4 mock_data.py --ft-width 0.25 --samp-idx $i; done
+for i in {2..29}; do addqueue -q berg -c "24 hrs" -n 1 -m 4 mock_data.py --ft-width 0.25 --window True --samp-idx $i; done
 """
 import numpy as np
 from math import floor, ceil
@@ -60,6 +61,7 @@ def set_args( use_GP:bool=False ):
         parser.add_argument("--no-cholesky", dest="use_cholesky", action="store_false")
         parser.add_argument("--testing", default=False, type=bool)
         parser.add_argument("--ft-width", default=10, type=float)
+        parser.add_argument("--window", default=False, type=bool)
         parser.add_argument("--samp-idx", type=int)
         args = parser.parse_args()
 
@@ -91,7 +93,6 @@ Initialize parameters for mock data generation and analysis.
 use_GP    = True    # Note: A median filter is used if use_GP = False.
 apply_DTW = True
 corr_rad  = True
-use_window = True
 
 args = set_args( use_GP )
     
@@ -99,34 +100,18 @@ args = set_args( use_GP )
 bump_size = -4.0    # Bump size similar to that in Sanders' NGC 1560.
 bump_loc  = 5.0
 
-# file_FWHM  = args.ft_width
-# bump_FWHM  = file_FWHM / 10
-# bump_sigma = bump_FWHM / (2.0 * np.sqrt(2.0 * np.log(2.0)))
-
+testing = args.testing
+use_window = args.window
 bump_sigma = args.ft_width
 
-# print(f"Correlating RCs with features of FWHM = {bump_FWHM}")
+if testing: height_arr = np.linspace(5.0, 2.0, 7, endpoint=True)
+else: height_arr = np.linspace(20.0, 2.0, 37, endpoint=True)
 
-# Generate noise from 1 / uniform height array (fewer iterations for GP due to demanding runtime).
-# if use_GP:
-#     height_arr = np.linspace(20.0, 2.0, 37, endpoint=True)
-#     noise_arr = - bump_size / height_arr
-#     num_iterations = 50
-# else:
-
-# height_arr = np.linspace(5.0, 2.0, 7, endpoint=True)
-height_arr = np.linspace(20.0, 2.0, 37, endpoint=True)
 noise_arr = - bump_size / height_arr
-num_iterations = 1000
-
 num_noise = len(noise_arr)
 
-
-# Initialize arrays for summary arrays.
-# rad_spearmans     = [ [ [] for _ in range(num_noise) ] for _ in range(3) ]
-# rad_pearsons      = [ [ [] for _ in range(num_noise) ] for _ in range(3) ]
-# rad_Xft_spearmans = [ [ [] for _ in range(num_noise) ] for _ in range(3) ]
-# rad_Xft_pearsons  = [ [ [] for _ in range(num_noise) ] for _ in range(3) ]
+if testing: num_iterations = 10
+else: num_iterations = 1000
 
 # Remove PCHIP interpolation and therefore higher derivatives.
 MOND_spearmans = [ [] for _ in range(num_noise) ]
@@ -135,33 +120,25 @@ LCDM_spearmans = [ [] for _ in range(num_noise) ]
 LCDM_pearsons = [ [] for _ in range(num_noise) ]
 
 MOND_costs, LCDM_costs  = np.zeros((num_iterations, num_noise)), np.zeros((num_iterations, num_noise))
-# dtw_window, Xft_window = np.zeros((num_iterations, num_noise)), np.zeros((num_iterations, num_noise))
-
 
 # Create array of sampling rates to sample from.
 samp_idx    = args.samp_idx
 samp_rate   = np.linspace(1, 30, 30, endpoint=True, dtype=int)[samp_idx]
 num_samples = samp_rate * 10
-
 # if not use_GP: MF_size = int(max( 5, bump_FWHM * samp_rate * 2 ))
-
 
 # Print report of analyses used and some corresponding variables.
 print(f"[samp_rate = {samp_rate}] Running mock_data.py with the following methods:")
-if use_GP:    print(" - Gaussian process")
-# else:         print(f" - Median filter (window length = {MF_size})")
-if apply_DTW: print(" - Dynamic time warping")
-if corr_rad:  print(" - Correlation coefficients (increasing radii)")
-
+if testing:     print(" - Testing mode")
+if use_window:  print(" - Windowed analysis")
+if use_GP:      print(" - Gaussian process")
+if apply_DTW:   print(" - Dynamic time warping")
+if corr_rad:    print(" - Pearson coefficients")
+# if use_MF:    print(f" - Median filter (window length = {MF_size})")
 
 # Simple code for calculating feature significance by comparing costs/correlation coefficients
 # between (Vobs w/ ft + Vbar w/ ft) and (Vobs W/O ft + Vbar w/ ft).
 def get_significance(corr1, corr2):
-    # if rhos == True:
-    #     sigma1 = (corr1[0,:,2] - corr1[0,:,0]) / 2
-    #     sigma2 = (corr2[0,:,2] - corr2[0,:,0]) / 2
-    #     ftsig = abs(( corr2[0,:,1] - corr1[0,:,1] )) / np.sqrt(sigma1**2 + sigma2**2)
-    # else:   # DTW dim = 3 perc x num_noise
     sigma1 = (corr1[2] - corr1[0]) / 2
     sigma2 = (corr2[2] - corr2[0]) / 2
     ftsig = abs(( corr2[1] - corr1[1] )) / np.sqrt(sigma1**2 + sigma2**2)
@@ -184,8 +161,6 @@ Vmax, bump, Vbar_raw, vel_MOND, vel_LCDM = toy_gen(rad, bump_loc, bump_size, bum
 # Apply GP regression.
 if use_GP:
     print("\nApplying GPR...")
-    res_Vbar, res_LCDM, res_MOND = [], [], []
-
     rad_Xft = np.delete(rad, np.s_[floor(4.5*samp_rate):ceil(5.5*samp_rate)])
     Vbar_Xft = np.delete(Vbar_raw/Vmax, np.s_[floor(4.5*samp_rate):ceil(5.5*samp_rate)])
     Vmond_Xft = np.delete(vel_MOND/Vmax, np.s_[floor(4.5*samp_rate):ceil(5.5*samp_rate)])
@@ -196,12 +171,7 @@ if use_GP:
     Vcdm_means, Vcdm_bands = GP_fit(args, rad_Xft, Vcdm_Xft, rad)
 
 for i in range(num_noise):
-    # if i%10 == 0:
-        # if i == 0:
-        #     print(f"\nRunning noise level {i+1}/{num_noise} (with {num_iterations} iterations per level)...")
-        # else:
     print(f"\nRunning noise level {i+1}/{num_noise}...")
-
     noise = noise_arr[i]
     
     # Generate toy RCs with residuals (Vraw = w/o ft, Vraw_werr = w/ noise; velocities = w/ ft, v_werr = w/ noise);
@@ -212,51 +182,56 @@ for i in range(num_noise):
     # Vobs (w/ feature) residuals if it's generated perfectly by MOND.
     # MOND_res = (velocities[:,1,:] - Vraw[:,1,:])
 
+    res_Vbar, res_LCDM, res_MOND = [], [], []
 
     if use_GP:
-        # print(f"Calculating residuals (with {num_iterations} iterations)...")
         for itr in tqdm(range(num_iterations), desc="Calculating residuals"):
             if use_window:
-                res_Vbar.append( get_residuals(rad, Vbar[itr], rad, Vbar_means, Vbar_bands)[floor(4.0*samp_rate):ceil(6.0*samp_rate)] )
-                res_MOND.append( get_residuals(rad, Vmond[itr], rad, Vmond_means, Vmond_bands)[floor(4.0*samp_rate):ceil(6.0*samp_rate)] )
-                res_LCDM.append( get_residuals(rad, Vcdm[itr], rad, Vcdm_means, Vcdm_bands)[floor(4.0*samp_rate):ceil(6.0*samp_rate)] )
+                res_Vbar.append( get_residuals(rad, Vbar[itr], rad, Vbar_means, Vbar_bands)[floor(4.5*samp_rate):ceil(5.5*samp_rate)] )
+                res_MOND.append( get_residuals(rad, Vmond[itr], rad, Vmond_means, Vmond_bands)[floor(4.5*samp_rate):ceil(5.5*samp_rate)] )
+                res_LCDM.append( get_residuals(rad, Vcdm[itr], rad, Vcdm_means, Vcdm_bands)[floor(4.5*samp_rate):ceil(5.5*samp_rate)] )
             else:
                 res_Vbar.append( get_residuals(rad, Vbar[itr], rad, Vbar_means, Vbar_bands) )   # dim (after all appends) = itr x rad
                 res_MOND.append( get_residuals(rad, Vmond[itr], rad, Vmond_means, Vmond_bands) )
                 res_LCDM.append( get_residuals(rad, Vcdm[itr], rad, Vcdm_means, Vcdm_bands) )
+
+        if testing:
+            print(f"Shape of res_Vbar = {np.shape(res_Vbar)}")
+            print(f"Shape of res_MOND = {np.shape(res_MOND)}")
+            print(f"Shape of res_LCDM = {np.shape(res_LCDM)}")
             
         # Plot the generated mock data.
-        if samp_rate == 10 and i == 32:
+        if samp_rate == 10 and height_arr[i] == 4.0:
             print("Generating example plot...")
             fig, (ax0, ax1) = plt.subplots(2, 1, sharex=True, gridspec_kw={'height_ratios': [5, 2]})
 
             norm_noise = noise / Vmax
-            ax0.errorbar(rad, Vbar[0], norm_noise, alpha=0.25, c='tab:red', fmt='o', capsize=2, label=r"$v_{\text{bar}}$")
-            ax0.errorbar(rad, Vmond[0], norm_noise, alpha=0.25, c='mediumblue', fmt='o', capsize=2, label=r"$v_{\text{MOND}}$")
-            ax0.errorbar(rad, Vcdm[0], norm_noise, alpha=0.25, c='tab:green', fmt='o', capsize=2, label=r"$v_{\Lambda CDM}$")
+            ax0.errorbar(rad, Vbar[0], norm_noise, alpha=0.25, c='tab:red', fmt='o', capsize=2, label=r"$V_{\text{bar}}$")
+            ax0.errorbar(rad, Vmond[0], norm_noise, alpha=0.25, c='mediumblue', fmt='o', capsize=2, label=r"$V_{\text{MOND}}$")
+            ax0.errorbar(rad, Vcdm[0], norm_noise, alpha=0.25, c='tab:green', fmt='o', capsize=2, label=r"$V_{\Lambda CDM}$")
 
             ax0.plot(rad, Vbar_means, c='tab:red')
             ax0.plot(rad, Vmond_means, c='mediumblue')
             ax0.plot(rad, Vcdm_means, c='tab:green')
 
-            ax0.set_ylabel(r"Velocities ($\times v_{\text{max}}$)")
+            ax0.set_ylabel(r"Velocities ($\times V_{\text{max}}$)")
             ax0.legend()
             ax0.grid()
 
-            if use_window: r_plot = rad[floor(4.0*samp_rate):ceil(6.0*samp_rate)]
+            if use_window: r_plot = rad[floor(4.5*samp_rate):ceil(5.5*samp_rate)]
             else: r_plot = rad
 
             ax1.plot(r_plot, res_Vbar[0], c='tab:red', marker='o', alpha=0.3)
             ax1.plot(r_plot, res_MOND[0], c='mediumblue', marker='o', alpha=0.3)
             ax1.plot(r_plot, res_LCDM[0], c='tab:green', marker='o', alpha=0.3)
             ax1.grid()
-            ax1.set_ylabel(r"Residuals ($\times v_{\text{max}}$)")
+            ax1.set_ylabel("Residuals")
 
             ax1.set_xlabel("Radius (kpc)")
             plt.subplots_adjust(hspace=0.05)
 
-            if use_window: fig.savefig(f"{fileloc}example_window.pdf")
-            else: fig.savefig(f"{fileloc}example.pdf")
+            if use_window: fig.savefig(f"{fileloc}example_window.pdf", bbox_inches='tight')
+            else: fig.savefig(f"{fileloc}example.pdf", bbox_inches='tight')
             plt.close()
 
             # raise ValueError("Test plot generated. Exiting...")
@@ -282,14 +257,9 @@ for i in range(num_noise):
     -----------------
     """
     if apply_DTW:
-        print("Applying DTW...")
-        for itr in range(num_iterations):
-            MOND_cost = do_DTW(itr, num_rad, res_MOND, res_Vbar)
-            MOND_costs[itr][i] = MOND_cost
-
-        for itr in range(num_iterations):
-            LCDM_cost = do_DTW(itr, num_rad, res_LCDM, res_Vbar)
-            LCDM_costs[itr][i] = LCDM_cost
+        for itr in tqdm(range(num_iterations), desc="Applying DTW"):
+            MOND_costs[itr][i] = do_DTW(itr, num_rad, res_MOND, res_Vbar)
+            LCDM_costs[itr][i] = do_DTW(itr, num_rad, res_LCDM, res_Vbar)
 
 
     """
@@ -323,12 +293,66 @@ if apply_DTW:
     MOND_perc = np.nanpercentile( MOND_costs,  [16.0, 50.0, 84.0], axis=0 )    # dim = 3 x num_noise
     LCDM_perc = np.nanpercentile( LCDM_costs,  [16.0, 50.0, 84.0], axis=0 )
     dtw_ftsig = get_significance(MOND_perc, LCDM_perc)
-    if use_window: np.save(f"{fileloc}dtw_ftsig_window/num_samples={num_samples}", dtw_ftsig)
-    else: np.save(f"{fileloc}dtw_ftsig/num_samples={num_samples}", dtw_ftsig)
+
+    if testing:
+        print(f"\nShape of MOND_perc = {np.shape(MOND_perc)}")
+        print(f"Shape of LCDM_perc = {np.shape(LCDM_perc)}")
+        print(f"Shape of dtw_ftsig = {np.shape(dtw_ftsig)}")
+    else:
+        if use_window: np.save(f"{fileloc}dtw_ftsig_window/num_samples={num_samples}", dtw_ftsig)
+        else: np.save(f"{fileloc}dtw_ftsig/num_samples={num_samples}", dtw_ftsig)
 
 if corr_rad:
     rad_ftsig = get_significance(np.transpose(MOND_pearsons), np.transpose(LCDM_pearsons))
-    if use_window: np.save(f"{fileloc}rad_ftsig_window/num_samples={num_samples}", rad_ftsig)
-    else: np.save(f"{fileloc}rad_ftsig/num_samples={num_samples}", rad_ftsig)
+
+    if testing:
+        print(f"\nShape of MOND_pearsons = {np.shape(MOND_pearsons)}")
+        print(f"Shape of LCDM_pearsons = {np.shape(LCDM_pearsons)}")
+        print(f"Shape of rad_ftsig = {np.shape(rad_ftsig)}")
+    else:
+        if use_window: np.save(f"{fileloc}rad_ftsig_window/num_samples={num_samples}", rad_ftsig)
+        else: np.save(f"{fileloc}rad_ftsig/num_samples={num_samples}", rad_ftsig)
+
+
+"""
+--------------------------------
+Generate summary plots (if any).
+--------------------------------
+"""
+if samp_rate == 10 and not testing:
+    print("Plotting DTW costs...")   # DTW.
+
+    fig, ax = plt.subplots()
+    ax.plot(height_arr, MOND_perc[1], c='mediumblue', label="MOND")
+    ax.fill_between(height_arr, MOND_perc[0], MOND_perc[2], color='mediumblue', alpha=0.3)
+    ax.plot(height_arr, LCDM_perc[1], c='tab:green', label=r"$\Lambda$CDM")
+    ax.fill_between(height_arr, LCDM_perc[0], LCDM_perc[2], color='tab:green', alpha=0.3)
+
+    ax.legend()
+    ax.set_xlabel(r"Feature-to-noise ratio $(h/\epsilon)$")
+    ax.set_ylabel("DTW costs")
+    ax.grid()
+
+    if use_window: fig.savefig(f"{fileloc}dtw_bands_window.pdf", bbox_inches='tight')
+    else: fig.savefig(f"{fileloc}dtw_bands.pdf", bbox_inches='tight')
+    plt.close()
+
+    print("Plotting correlation significance...")   # Correlation coefficients.
+    MOND_pearsons, LCDM_pearsons = np.transpose(MOND_pearsons), np.transpose(LCDM_pearsons)
+
+    fig, ax = plt.subplots()
+    ax.plot(height_arr, MOND_pearsons[1], c='mediumblue', label="MOND")
+    ax.fill_between(height_arr, MOND_pearsons[0], MOND_pearsons[2], color='mediumblue', alpha=0.3)
+    ax.plot(height_arr, LCDM_pearsons[1], c='tab:green', label=r"$\Lambda$CDM")
+    ax.fill_between(height_arr, LCDM_pearsons[0], LCDM_pearsons[2], color='tab:green', alpha=0.3)
+
+    ax.legend()
+    ax.set_xlabel(r"Feature-to-noise ratio $(h/\epsilon)$")
+    ax.set_ylabel("Pearson coefficients")
+    ax.grid()
+
+    if use_window: fig.savefig(f"{fileloc}pearson_bands_window.pdf", bbox_inches='tight')
+    else: fig.savefig(f"{fileloc}pearson_bands.pdf", bbox_inches='tight')
+    plt.close()
 
 print("\nMemory usage: %s (kb)" %getrusage(RUSAGE_SELF).ru_maxrss)
