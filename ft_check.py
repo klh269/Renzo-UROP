@@ -13,6 +13,7 @@ import argparse
 
 from utils_analysis.toy_gen import toy_gen
 from utils_analysis.Vobs_fits import Vbar_sq
+from utils_analysis.mock_gen import Vbar_sq_unc
 from utils_analysis.little_things import get_things_res
 from utils_analysis.toy_GP import GP_fit, get_residuals
 from utils_analysis.extract_ft import ft_check
@@ -148,7 +149,13 @@ def NGC1560_ft():
     plt.close()
 
 
-def SPARC_ft(testing:bool=False):
+def SPARC_ft(testing:bool=False, use_Vbar:bool=False):
+    if use_Vbar:
+        SPARC_c = [ "Galaxy", "T", "D", "e_D", "f_D", "Inc",
+            "e_Inc", "L", "e_L", "Reff", "SBeff", "Rdisk",
+            "SBdisk", "MHI", "RHI", "Vflat", "e_Vflat", "Q", "Ref."]
+        table = pd.read_fwf( "/mnt/users/koe/SPARC_Lelli2016c.mrt.txt", skiprows=98, names=SPARC_c)
+
     columns = [ "Rad", "Vobs", "errV", "Vgas",
                 "Vdisk", "Vbul", "SBdisk", "SBbul" ]
 
@@ -157,9 +164,11 @@ def SPARC_ft(testing:bool=False):
 
     noise_arr = np.linspace(0.1, 10.0, 100)
     SPARC_noise_threshold = []
+    SPARC_features = {}
+    ft_count = 0
 
-    # for i in range(galaxy_count):
-    for i in tqdm(range(galaxy_count), desc="SPARC galaxies"):
+    for i in range(galaxy_count):
+    # for i in tqdm(range(galaxy_count), desc="SPARC galaxies"):
         g = "ESO563-G021" if testing else galaxies[i]
 
         file_path = "/mnt/users/koe/data/"+g+"_rotmod.dat"
@@ -182,13 +191,35 @@ def SPARC_ft(testing:bool=False):
             idx = (np.abs(rad - r[k])).argmin()
             res_Vobs.append(v_components[1][k] - mean_prediction[3][idx])
 
+        if use_Vbar:
+            res_Vbar = []
+            for k in range(len(r)):
+                idx = (np.abs(rad - r[k])).argmin()
+                res_Vbar.append(v_components[0][k] - mean_prediction[0][idx])
+
+            Vbar2_unc = Vbar_sq_unc( table, np.where(table["Galaxy"] == g)[0][0], data, bulged, 1000 )
+            Vbar_bands = np.sqrt( np.percentile(Vbar2_unc, [16.0, 84.0], axis=1) )
+            Vbar_err = (Vbar_bands[1] - Vbar_bands[0]) / 2.0
+
+            lb, rb, widths = ft_check( np.array(res_Vbar)[5:], Vbar_err[5:], 2.0 )
+            if len(widths) > 0: print(f" - Feature found in Vbar(!) of {g}: lb = {lb+5}; rb = {rb+5}; widths = {widths}")
+
         for noise in np.flip(noise_arr):
             _, _, widths = ft_check( np.array(res_Vobs)[5:], np.array(data["errV"])[5:], noise )
             if len(widths) > 0:
-                if noise >= 2.0: print(g)
+                if noise >= 2.0:
+                    lb, rb, widths = ft_check( np.array(res_Vobs)[5:], np.array(data["errV"])[5:], 2.0 )
+                    print(f"Feature found in Vobs of {g}: lb = {lb+5}; rb = {rb+5}; widths = {widths}")
+                    SPARC_features.update({g: [lb+5, rb+5, widths]})
+                    ft_count += 1
                 SPARC_noise_threshold.append(noise)
                 break
     
+    print(f"\nA total of {ft_count} galaxies with features (in Vobs).")
+
+    np.save("/mnt/users/koe/gp_fits/SPARC_features.npy", SPARC_features)
+    print(f"\nSPARC ft properties saved to /mnt/users/koe/gp_fits/SPARC_features.npy")
+
     return SPARC_noise_threshold
 
 
@@ -286,7 +317,7 @@ if __name__ == "__main__":
 
     """Histogram for SPARC."""
     # SPARC_err_thresholds = SPARC_error_model(num_samples)
-    SPARC_noise_thresholds = SPARC_ft()
+    SPARC_noise_thresholds = SPARC_ft( use_Vbar=True )
 
     # plt.hist(SPARC_err_thresholds, bins=np.arange(0.0, 10.0, 0.1), weights=np.ones(np.shape(SPARC_err_thresholds))/num_samples, alpha=0.4, color="k", label="Expected distribution (MC sampling)")
     # plt.hist(SPARC_noise_thresholds, bins=np.arange(0.0, 10.0, 0.1), alpha=0.5, color="tab:blue", label="Features extracted from data")
