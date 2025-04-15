@@ -8,13 +8,13 @@ import matplotlib
 import matplotlib.pyplot as plt
 import numpy as np
 
-# from utils_analysis.Vobs_fits import Vbar_sq
-from utils_analysis.mock_gen import Vbar_sq_unc, Vobs_MCMC
+from utils_analysis.Vobs_fits import Vbar_sq
+# from utils_analysis.mock_gen import Vbar_sq_unc, Vobs_MCMC
 
 matplotlib.use("Agg")  # noqa: E402
 plt.rcParams.update({'font.size': 13})
 
-use_fits = True
+use_fits = False  # Use MCMC fits to get Vbar and Vobs.
 
 if __name__ == "__main__":
     # Save data and GP predictions for final plots.
@@ -43,28 +43,28 @@ if __name__ == "__main__":
         errV = data["errV"].to_numpy()
 
         bulged = np.any(data["Vbul"] > 0) # Check whether galaxy has bulge.
-        # Vbar = np.sqrt(Vbar_sq(data, bulged).to_numpy())
+        Vbar = np.sqrt(Vbar_sq(data, bulged).to_numpy())
 
-        if use_fits:
-            nfw_samples = Vobs_MCMC(table, i_tab, data, bulged, profile="NFW")    # Vobs_MCMC() runs MCMC with Vobs_fit() from Vobs_fits.py
-            v_LCDM = nfw_samples["Vpred"][np.argmax(nfw_samples["log_likelihood"])]
-            Vbar_LCDM = nfw_samples["Vbar"][np.argmax(nfw_samples["log_likelihood"])]
+        # if use_fits:
+        #     nfw_samples = Vobs_MCMC(table, i_tab, data, bulged, profile="NFW")    # Vobs_MCMC() runs MCMC with Vobs_fit() from Vobs_fits.py
+        #     v_LCDM = nfw_samples["Vpred"][np.argmax(nfw_samples["log_likelihood"])]
+        #     Vbar_LCDM = nfw_samples["Vbar"][np.argmax(nfw_samples["log_likelihood"])]
 
-            # Select 1000 random samples from MCMC fits.
-            rand_idx = np.random.choice( 20000, 1000, replace=False )
-            full_LCDM = nfw_samples["Vpred scattered"][rand_idx].T
-            Vbar_full = nfw_samples["Vbar"][rand_idx].T
+        #     # Select 1000 random samples from MCMC fits.
+        #     rand_idx = np.random.choice( 20000, 1000, replace=False )
+        #     full_LCDM = nfw_samples["Vpred scattered"][rand_idx].T
+        #     Vbar_full = nfw_samples["Vbar"][rand_idx].T
 
-        else:
-            Vbar_full = np.sqrt(Vbar_sq_unc(table, i_tab, data, bulged, num_samples=1000))
+        # else:
+        #     Vbar_full = np.sqrt(Vbar_sq_unc(table, i_tab, data, bulged, num_samples=1000))
             
-        Vbar_perc = np.percentile(Vbar_full, [16, 50, 84], axis=1)
+        # Vbar_perc = np.percentile(Vbar_full, [16, 50, 84], axis=1)
 
         # Save data.
         r_data.append(r)
         Vobs_ALL.append(Vobs)
         errV_ALL.append(errV)
-        Vbar_ALL.append(Vbar_perc)
+        Vbar_ALL.append(Vbar)
 
         # Load in GP results from combined_dtw.py.
         gp_fits = np.load("/mnt/users/koe/gp_fits/"+g+".npy")
@@ -79,7 +79,8 @@ if __name__ == "__main__":
 
     for i, ax in enumerate(axes.flatten()):
         ax.errorbar(r_data[i], Vobs_ALL[i], yerr=errV_ALL[i], fmt=".", capsize=2, c="k", label=r"$V_\text{obs}$ (data)", zorder=2)
-        ax.errorbar(r_data[i], Vbar_ALL[i][1], yerr=np.diff(Vbar_ALL[i], axis=0), fmt=".", c="crimson", capsize=2, label=r"$V_\text{bar}$ (data)", alpha=0.6, zorder=1)
+        # ax.errorbar(r_data[i], Vbar_ALL[i][1], yerr=np.diff(Vbar_ALL[i], axis=0), fmt=".", c="crimson", capsize=2, label=r"$V_\text{bar}$ (data)", alpha=0.6, zorder=1)
+        ax.scatter(r_data[i], Vbar_ALL[i], marker='.', c="crimson", label=r"$V_\text{bar}$ (data)", alpha=0.6, zorder=1)
         ax.plot(radii[i], mean_pred[i][1], label=r"$V_\text{obs}$ (GPR)", zorder=10)
         ax.plot(radii[i], mean_pred[i][0], label=r"$V_\text{bar}$ (GPR))", zorder=10)
         ax.fill_between(radii[i], lower_perc[i][1], upper_perc[i][1], alpha=0.3)    #, label=r"$1\sigma$ confidence ($V_\text{obs}$)")
