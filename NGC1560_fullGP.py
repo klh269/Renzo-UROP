@@ -92,7 +92,7 @@ def main(args, r_full, rad, v_data, v_mock, num_samples=num_samples, ls:float=4.
         if plot_digitizer:
             r_Xft = np.delete(r_full, np.s_[19:24], axis=0)
             data_Xft = np.delete(v_data[j], np.s_[19:24], axis=0)
-            means, predictions = vmap(
+            means, _ = vmap(
                 lambda rng_key, var, noise: predict(
                     rng_key, r_Xft, data_Xft, rad, var, ls, noise, use_cholesky=args.use_cholesky
                 )
@@ -100,7 +100,7 @@ def main(args, r_full, rad, v_data, v_mock, num_samples=num_samples, ls:float=4.
         else:
             r_Xft = np.delete(r_full, np.s_[37:58], axis=0)
             data_Xft = np.delete(v_data[j], np.s_[37:58], axis=0)
-            means, predictions = vmap(
+            means, _ = vmap(
                 lambda rng_key, var, noise: predict(
                     rng_key, r_Xft, data_Xft, rad, var, ls, noise, use_cholesky=args.use_cholesky
                 )
@@ -158,6 +158,9 @@ def main(args, r_full, rad, v_data, v_mock, num_samples=num_samples, ls:float=4.
 
             mean_pred = np.mean(means, axis=0)
             meanGP_mock.append(mean_pred)   # [ Vbar_MOND, Vbar_LCDM, MOND, LCDM ]
+
+            if smp == 0: plotGP_mock = np.array(mean_pred) / num_samples
+            else: plotGP_mock += np.array(mean_pred) / num_samples
 
             jax.clear_caches()    # One-line attempt to solve the JIT memory allocation problem.
 
@@ -316,11 +319,17 @@ def main(args, r_full, rad, v_data, v_mock, num_samples=num_samples, ls:float=4.
                 else: ax0.scatter(r_full, raw_median[j], c=colours[j], alpha=0.3, marker='.')   # MOND, LCDM
                 # Plot mean prediction from GP.
                 if j < 2: ax0.plot(rad, meanGP_data[j], color=colours[j], label=v_comps[j], zorder=10-j)
-                else: ax0.plot(rad, meanGP_mock[j], color=colours[j], label=v_comps[j], zorder=10-j)
+                else: ax0.plot(rad, plotGP_mock[j], color=colours[j], label=v_comps[j], zorder=10-j)
 
             if plot_digitizer: ax0.legend()
             if not use_window: ax0.set_ylim((0.0, 83.0))
-            ax0.grid()
+
+            if plot_digitizer:
+                ax0.axvline(r_full[19], c='k', ls='--', alpha=0.5, zorder=0, label="Feature")
+                ax0.axvline(r_full[23], c='k', ls='--', alpha=0.5, zorder=0)
+            else:
+                ax0.axvline(r_full[37], c='k', ls='--', alpha=0.5, zorder=0, label="Feature")
+                ax0.axvline(r_full[57], c='k', ls='--', alpha=0.5, zorder=0)
 
             if plot_digitizer: ax1.set_ylabel("Residuals")
 
@@ -331,7 +340,13 @@ def main(args, r_full, rad, v_data, v_mock, num_samples=num_samples, ls:float=4.
                 ax1.scatter(r, res_perc[1,j], c=colours[j], marker='.', alpha=0.3, zorder=10-j)     # MOND, LCDM
 
             if not use_window: ax1.set_ylim((-8.5, 8.5))
-            ax1.grid()
+
+            if plot_digitizer:
+                ax0.axvline(r_full[19], c='k', ls='--', alpha=0.5, zorder=0, label="Feature")
+                ax0.axvline(r_full[23], c='k', ls='--', alpha=0.5, zorder=0)
+            else:
+                ax0.axvline(r_full[37], c='k', ls='--', alpha=0.5, zorder=0, label="Feature")
+                ax0.axvline(r_full[57], c='k', ls='--', alpha=0.5, zorder=0)
 
             ax2.set_xlabel("Radius (kpc)")
             if plot_digitizer: ax2.set_ylabel(r"$\rho_p$ w.r.t. $V_{\text{bar}}$")
@@ -348,7 +363,13 @@ def main(args, r_full, rad, v_data, v_mock, num_samples=num_samples, ls:float=4.
             else: ax2.plot(r[4:], pearsonr_data[2:], c='k', label=r"Data: Pearson $\rho$")
 
             if not use_window: ax2.set_ylim((0.0, 0.9))
-            ax2.grid()
+
+            if plot_digitizer:
+                ax0.axvline(r_full[19], c='k', ls='--', alpha=0.5, zorder=0, label="Feature")
+                ax0.axvline(r_full[23], c='k', ls='--', alpha=0.5, zorder=0)
+            else:
+                ax0.axvline(r_full[37], c='k', ls='--', alpha=0.5, zorder=0, label="Feature")
+                ax0.axvline(r_full[57], c='k', ls='--', alpha=0.5, zorder=0)
 
             if not plot_digitizer:
                 ax0.set_yticklabels([])
@@ -417,8 +438,7 @@ if __name__ == "__main__":
     table = { "D":[2.99], "e_D":[0.1], "Inc":[82.0], "e_Inc":[1.0] }
     i_table = 0
 
-    rad_count = math.ceil((max(r)-min(r))*100)
-    rad = np.linspace(min(r), max(r), rad_count)
+    rad = np.linspace(min(r), max(r), 100)
 
     # Normalise velocities by Vmax = max(Vobs) from SPARC data.
     Vbar2 = Vbar_sq(data, bulged)
@@ -428,11 +448,6 @@ if __name__ == "__main__":
     nfw_samples  = Vobs_MCMC(table, i_table, data, bulged, profile="NFW")    # Vobs_MCMC() runs MCMC with Vobs_fit() from Vobs_fits.py
     print("Fitting for MOND...")
     mond_samples = Vobs_MCMC(table, i_table, data, bulged, profile="MOND")
-
-    v_LCDM = nfw_samples["Vpred"][np.argmax(nfw_samples["log_likelihood"])]
-    v_MOND = mond_samples["Vpred"][np.argmax(mond_samples["log_likelihood"])]
-    Vbar_LCDM = nfw_samples["Vbar"][np.argmax(nfw_samples["log_likelihood"])]
-    Vbar_MOND = mond_samples["Vbar"][np.argmax(mond_samples["log_likelihood"])]
 
     # Select num_samples random samples from MCMC fits; dim = (num_samples, len(r)).
     rand_idx = np.random.choice( 20000, num_samples, replace=False )
@@ -508,39 +523,6 @@ if make_plots:
         ax.set_xticks([])
         ax.set_ylabel("Normalized DTW cost")
         fig.savefig(fname_DTW+"histo1.pdf", dpi=300, bbox_inches="tight")
-        plt.close()
-
-    """
-    Plot histogram of Pearson coefficients across RC (in ascending order of coefficients for data).
-    """
-    if do_correlations:
-        """Pearson histogram"""
-        # Rearrange galaxies into ascending order in median of corr(MOND, Vbar).
-        # dim = (# of galaxies, 2 x mock_vcomps, 3 x percentiles)
-        mock_sorted = np.array(sorted(pearson_mock, key=lambda x: x[0][0]))
-
-        plt.title("Pearson coefficients across RC")
-        hist_labels = [ "Data", "MOND", r"$\Lambda$CDM" ]
-        colours = [ 'k', 'mediumblue', 'tab:green' ]
-
-        plt.bar(galaxies, sorted(pearson_data), color=colours[0], alpha=0.3, label=hist_labels[0])
-        plt.axhline(y=pearson_data, color=colours[0], linestyle='dashed', label="Mean = {:.4f}".format(pearson_data[0]))
-
-        print("\nPearson correlation (Data) = {:.4f}".format(pearson_data[0]))
-
-        for j in range(2):
-            low_err = mock_sorted[:,j,1] - mock_sorted[:,j,0]
-            up_err = mock_sorted[:,j,2] - mock_sorted[:,j,1]
-
-            print("\nMedian correlation ("+hist_labels[j+1]+") = {:.4f}".format(mock_sorted[0,j,1]))
-            print("Upper correlation = {:.4f}".format(up_err[0]))
-            print("Lower correlation = {:.4f}".format(low_err[0]))
-
-            plt.errorbar(galaxies, mock_sorted[:,j,1], [low_err, up_err], fmt='.', ls='none', capsize=2.5, color=colours[j+1], alpha=0.5, label=hist_labels[j+1])
-        
-        plt.legend()
-        plt.xticks([])
-        plt.savefig(fileloc+"pearson/histo1.pdf", dpi=300, bbox_inches="tight")
         plt.close()
 
 print("Max memory usage: %s (kb)" %getrusage(RUSAGE_SELF).ru_maxrss)
