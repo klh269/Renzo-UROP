@@ -9,7 +9,6 @@ Galaxies should be fitted in parallel using SPARC_fullGP/run_analyses.py.
 import pandas as pd
 import argparse
 from resource import getrusage, RUSAGE_SELF
-# from tqdm import tqdm
 
 import matplotlib
 import matplotlib.pyplot as plt
@@ -46,6 +45,8 @@ def main(args, g, r_full, rad, v_data, v_mock, ls:float, num_samples=num_samples
     mock_labels = [ r"$V_{\text{MOND}}$", r"$V_{\Lambda CDM}$" ]
     v_comps = data_labels + mock_labels
     colours = [ 'tab:red', 'k', 'mediumblue', 'tab:green' ]
+
+    raw_median = np.median(v_mock, axis=1)    # dim = (4, r)
 
 
     """ ------------
@@ -117,7 +118,7 @@ def main(args, g, r_full, rad, v_data, v_mock, ls:float, num_samples=num_samples
             for k in range(len(r_full)):
                 idx = (np.abs(rad - r_full[k])).argmin()
                 res_Vbar_mock.append(v_mock[0,smp,k] - meanGP_mock[0][idx])
-                res_MOND.append(v_mock[1,smp,k] - meanGP_mock[2][idx])
+                res_MOND.append(v_mock[1,smp,k] - meanGP_mock[1][idx])
                 res_LCDM.append(v_mock[2,smp,k] - meanGP_mock[2][idx])
             res_mock.append( np.array([ res_Vbar_mock, res_Vbar_mock, res_MOND, res_LCDM ]) )   # dim = num_samples x (4, len(r))
 
@@ -132,8 +133,10 @@ def main(args, g, r_full, rad, v_data, v_mock, ls:float, num_samples=num_samples
         """ --------------------
         Load mock samples.
         -------------------- """
-        res_mock = np.load( f"/mnt/users/koe/mock_residuals/{g}.npy" )
+        res_mock = np.load( f"/mnt/users/koe/mock_residuals/{g}.npy" )  # dim = (4, len(r), num_samples)
         if print_progress: print("Mock residuals loaded.")
+        
+    res_mock_percentiles = np.percentile(res_mock, [16.0, 50.0, 84.0], axis=2)  # dim = (3, 4, len(r))
 
 
     """ -------------------------
@@ -159,7 +162,6 @@ def main(args, g, r_full, rad, v_data, v_mock, ls:float, num_samples=num_samples
 
     """ DTW. """
     for smp in range(num_samples):
-    # for smp in tqdm(range(num_samples), desc="DTW"):
         # Construct distance matrices.
         dist_data = np.zeros((len(r), len(r)))
         dist_MOND = np.copy(dist_data)
@@ -207,14 +209,14 @@ def main(args, g, r_full, rad, v_data, v_mock, ls:float, num_samples=num_samples
                 if j == 0:
                     diff = abs(max(np.array(res_data[0])) - min(res_data[1]))
                     for x_i, y_j in path:
-                        plt.plot([x_i, y_j], [res_data[1,x_i] + diff, res_data[0][y_j] - diff], c="C7", alpha=0.4)
+                        plt.plot([x_i, y_j], [res_data[1,x_i] + diff, res_data[0,y_j] - diff], c="C7", alpha=0.4)
                     plt.plot(np.arange(len(r)), res_data[1] + diff, c='k', label=v_comps[1])
                     plt.plot(np.arange(len(r)), res_data[0] - diff, c="tab:red", label=r'$V_{\text{bar}}$')
 
                 else: 
                     diff = abs(max(np.array(res_mock)[j-1,:,smp]) - min(np.array(res_mock)[j+1,:,smp]))
                     for x_i, y_j in path:
-                        plt.plot([x_i, y_j], [res_mock[j+1][x_i][smp] + diff, res_mock[j-1][y_j][smp] - diff], c="C7", alpha=0.4)
+                        plt.plot([x_i, y_j], [res_mock[j+1,x_i,smp] + diff, res_mock[j-1,y_j,smp] - diff], c="C7", alpha=0.4)
                     plt.plot(np.arange(len(r)), np.array(res_mock)[j+1,:,smp] + diff, c=colours[j+1], label=v_comps[j+1])
                     plt.plot(np.arange(len(r)), np.array(res_mock)[j-1,:,smp] - diff, c='tab:red', label=r'$V_{\text{bar}}$')
 
@@ -227,15 +229,75 @@ def main(args, g, r_full, rad, v_data, v_mock, ls:float, num_samples=num_samples
                 plt.close('all')
 
     """ Pearson correlation coefficients. """
-    pearson_data = stats.pearsonr(res_data[0], res_data[1])[0]
-    radii_corr = []
+    pearsonr_data = []
+    for j in range(3, len(r)+1):
+        pearsonr_data.append(stats.pearsonr(res_data[0,:j], res_data[1,:j])[0])
+    pearson_data = pearsonr_data[-1]
 
+    radii_corr = []
     for smp in range(num_samples):
-    # for smp in tqdm(range(num_samples), desc="Correlation by radii"):
-        radii_corr.append( [ stats.pearsonr(res_mock[0,:,smp], res_mock[2,:,smp])[0],
-                            stats.pearsonr(res_mock[1,:,smp], res_mock[3,:,smp])[0] ] )     # [ MOND, LCDM ]
+        correlations_r = []
+        for i in range(1, 3):
+            pearsonr_mock = []
+            for j in range(3, len(r)+1):
+                pearsonr_mock.append(stats.pearsonr(res_Vbar_data[:j], res_mock[i,:j,smp])[0])
+            correlations_r.append(pearsonr_mock)
+        radii_corr.append(correlations_r)
+        
+    rcorr_percentiles = np.percentile(radii_corr, [16.0, 50.0, 84.0], axis=0)
+    pearson_mock = [ rcorr_percentiles[:,0,-1], rcorr_percentiles[:,1,-1] ]
+
+    """ Plot GP fits, residuals and correlations. """
+    if make_plots:
+        c_temp = [ 'tab:red', 'mediumblue', 'tab:green' ]
+        labels_temp = [ r"$V_\text{bar}$", r"$V_\text{MOND}$", r"$V_{\Lambda CDM}$", r"$V_\text{obs}$" ]
+
+        """Pearson correlations."""
+        fig1, (ax0, ax1, ax2) = plt.subplots(3, 1, sharex=True, gridspec_kw={'height_ratios': [5, 2, 3]})
+        fig1.set_size_inches(7, 7)
+        ax0.set_title("Residuals correlation: "+g)
+        ax0.set_ylabel("Velocities (km/s)")
+        
+        for j in range(4):
+            if j == 3:
+                ax0.errorbar(r, v_data[1], v_data[2], color='k', alpha=0.3, fmt='o', capsize=2, label=labels_temp[j])
+            else:
+                ax0.scatter(r, raw_median[j], c=c_temp[j], alpha=0.3, label=labels_temp[j])
+
+        ax0.legend(bbox_to_anchor=(1, 1), loc="upper left")
+        ax0.grid()
+
+        ax1.set_ylabel("Residuals (km/s)")
+        for j in range(4):
+            # Plots for mock Vobs + Vbar (sampled w/ uncertainties).
+            if j == 3:
+                ax1.errorbar(r[2:], res_data[1,2:], v_data[2,2:], color='k', alpha=0.3, ls='none', fmt='o', capsize=2)
+                ax1.plot(r[2:], res_data[1,2:], color='k')
+            else:
+                ax1.scatter(r[2:], res_mock_percentiles[1,j+1,2:], c=c_temp[j], alpha=0.3)
+                ax1.plot(r[2:], res_mock_percentiles[1,j+1,2:], c=c_temp[j])
+                ax1.fill_between(r[2:], res_mock_percentiles[0,j+1,2:], res_mock_percentiles[2,j+1,2:], color=c_temp[j], alpha=0.15)
+
+        ax1.grid()
+
+        ax2.set_xlabel("Radii (kpc)")
+        ax2.set_ylabel("Correlations w/ Vbar")
+
+        ax2.plot(r[2:], pearsonr_data, c='k')
+        for j in range(2):
+            ax2.plot(r[2:], rcorr_percentiles[1,j], c=colours[j+2])
+            ax2.fill_between(r[2:], rcorr_percentiles[0,j], rcorr_percentiles[2,j], color=colours[j+2], alpha=0.2)
+
+        ax2.grid()
+        plt.subplots_adjust(hspace=0.05)
+        fig1.savefig(fileloc+"pearson/"+g+".png", dpi=300, bbox_inches="tight")
+        plt.close()
     
-    pearson_mock = np.percentile(radii_corr, [16.0, 50.0, 84.0], axis=0).T
+    # for smp in range(num_samples):
+    #     radii_corr.append( [ stats.pearsonr(res_mock[0,:,smp], res_mock[2,:,smp])[0],
+    #                         stats.pearsonr(res_mock[1,:,smp], res_mock[3,:,smp])[0] ] )     # [ MOND, LCDM ]
+    
+    # pearson_mock = np.percentile(radii_corr, [16.0, 50.0, 84.0], axis=0).T
 
     g_dict = { "Vbar_features" : Vbar_features, "Vobs_features" : Vobs_features,
                "pearson_data" : pearson_data, "pearson_mock" : pearson_mock, "dtw_cost" : dtw_cost }
@@ -335,7 +397,7 @@ if __name__ == "__main__":
         full_LCDM = Vobs_scat(LCDM_unc(Vbar_squared, i_tab, num_samples), data["errV"], num_samples)
 
         v_data = np.array([ np.sqrt(Vbar_sq(data)), data["Vobs"], data["errV"] ])
-        v_mock = np.array([ np.sqrt(Vbar_squared).T, full_MOND.T, full_LCDM.T ])
+        v_mock = np.array([ np.sqrt(Vbar_squared).T, full_MOND.T, full_LCDM.T ])    # dim = (3, num_samples, len(r))
 
         ls_dict = np.load("/mnt/users/koe/gp_fits/ls_dict.npy", allow_pickle=True).item()
         ls = ls_dict[g]
