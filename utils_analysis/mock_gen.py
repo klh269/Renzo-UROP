@@ -13,30 +13,24 @@ from .Vobs_fits import Vobs_fit, BIC_from_samples
 
 
 # Sample Vbar squared with uncertainties in M/L ratios, luminosities and distances.
-def Vbar_sq_unc(table, i_table, data, bulged=False, num_samples=num_samples):
-    # Sample mass-to-light ratios
-    dist_pdisk = np.random.normal(pdisk, 0.125, size=num_samples)
-    dist_pgas = np.random.normal(1., 0.04, size=num_samples)
-    dist_pbul = np.random.normal(pbul, 0.175, size=num_samples)
-
-    # # Sample inclination (remember to convert from degrees to radians!).
-    # inc_mean, inc_err = table["Inc"][i_table]*np.pi/180, table["e_Inc"][i_table]*np.pi/180
-    # inc_min, inc_max = 0.0, 150 * np.pi / 180
-    # inc = stats.truncnorm.rvs( (inc_min-inc_mean) / inc_err, (inc_max-inc_mean) / inc_err, loc=inc_mean, scale=inc_err, size=num_samples )
-    # inc_scaling = np.sin(inc_mean) / np.sin(inc)
-
-    # # Scale Vobs and errV according to sampled inclication.
-    # Vobs = np.array(data["Vobs"]) * inc_scaling
-    # e_Vobs = np.array(data["errV"]) * inc_scaling
+def Vbar_sq_unc(table, i_table, data, bulged=False, num_samples=num_samples, pdisk:float=pdisk, pdisk_dex:float=0.1):
+    # Sample mass-to-light ratios (truncated normals!)
+    if pdisk == 0.5 and pdisk_dex == 0.1: dist_pdisk = stats.truncnorm.rvs( - pdisk / 0.125, np.inf, loc=pdisk, scale=0.125, size=num_samples )
+    else: dist_pdisk = stats.uniform.rvs( pdisk * 10**(-pdisk_dex), pdisk * 10**pdisk_dex - pdisk * 10**(-pdisk_dex), size=num_samples )
+    dist_pgas  = stats.truncnorm.rvs( - 25.0,          np.inf, loc=1.0,   scale=0.04,  size=num_samples )
+    dist_pbul  = stats.truncnorm.rvs( - pbul / 0.175,  np.inf, loc=pbul,  scale=0.175, size=num_samples )
 
     # Sample luminosity
-    L36 = stats.truncnorm.rvs(-table["L"][i_table] / table["e_L"][i_table], np.inf, loc=table["L"][i_table], scale=table["e_L"][i_table], size=num_samples)
-    dist_pdisk *= L36 / table["L"][i_table]
-    dist_pbul *= L36 / table["L"][i_table]
+    # if table["e_L"][i_table] > 1e-6:
+    #     L36 = stats.truncnorm.rvs( -table["L"][i_table] / table["e_L"][i_table], np.inf, loc=table["L"][i_table], scale=table["e_L"][i_table], size=num_samples )
+    #     dist_pdisk *= L36 / table["L"][i_table]
+    #     dist_pbul *= L36 / table["L"][i_table]
 
     # Sample distance to the galaxy
-    galdist = stats.truncnorm.rvs(-table["D"][i_table] / table["e_D"][i_table], np.inf, loc=table["D"][i_table], scale=table["e_D"][i_table], size=num_samples)
-    dist_scale = galdist / table["D"][i_table]
+    if table["e_D"][i_table] < 1e-6: dist_scale = 1.0
+    else:
+        galdist = stats.truncnorm.rvs( -table["D"][i_table] / table["e_D"][i_table], np.inf, loc=table["D"][i_table], scale=table["e_D"][i_table], size=num_samples )
+        dist_scale = galdist / table["D"][i_table]
     dist_scaling = np.full((len(data["Vdisk"]), num_samples), dist_scale)
 
     dist_pdisk = np.array([dist_pdisk] * len(data["Vdisk"]))
@@ -76,13 +70,14 @@ def Vobs_scat_corr(Vobs, errV, num_samples=num_samples):
 
 
 # Fit LCDM (NFW) or MOND mock data to Vobs array.
-def Vobs_MCMC(table, i_table, data, bulged, profile):
+def Vobs_MCMC(table, i_table, data, bulged, profile, pdisk:float=pdisk, pdisk_dex:float=0.1):
     nuts_kernel = NUTS(Vobs_fit, init_strategy=init_to_median(num_samples=num_samples))
     mcmc = MCMC(nuts_kernel, num_warmup=10000, num_samples=20000, progress_bar=False)
-    mcmc.run(random.PRNGKey(0), table, i_table, data, bulged, profile=profile)
-    mcmc.print_summary()
+    mcmc.run(random.PRNGKey(0), table, i_table, data, bulged, profile=profile, pdisk=pdisk, pdisk_dex=pdisk_dex)
+    # mcmc.print_summary()
     samples = mcmc.get_samples()
-    log_likelihood = samples.pop("log_likelihood")
+    # log_likelihood = samples.pop("log_likelihood")
+    log_likelihood = samples["log_likelihood"]
 
     print(f"BIC: {BIC_from_samples(samples, log_likelihood)}")
     return samples

@@ -15,7 +15,7 @@ from .params import G, pdisk, pbul, a0, RHO200C, LITTLE_H
 
 
 # Calculate baryonic matter from data of individual galaxies.
-def Vbar_sq(arr, bulged:bool=False):
+def Vbar_sq(arr, bulged:bool=False, pdisk:float=pdisk, pbul:float=pbul):
     if bulged:
         v_sq = arr["Vgas"]**2 + arr["Vdisk"]**2 * pdisk + arr["Vbul"]**2 * pbul
     else:
@@ -109,7 +109,7 @@ def transformed_normal(loc, scale):
 # Main code for sampling Vbar uncertainties and fit to Vobs. #
 ##############################################################
 
-def Vobs_fit(table, i_table, data, bulged, profile):
+def Vobs_fit(table, i_table, data, bulged, profile, pdisk:float=pdisk, pdisk_dex:float=0.1):
     """
     Code for fitting halo profile to observed Vobs + Vbar.
     A major part of this references model.py from Richard Stiskalek:
@@ -122,12 +122,11 @@ def Vobs_fit(table, i_table, data, bulged, profile):
         # rc = sample("Rc", dist.Uniform(0., 100*Rmax))
     
     # Sample mass-to-light ratios.
-    smp_pgas  = sample("Gas M/L", dist.TruncatedNormal(1.0, 0.04, low=0.0))
-    smp_pdisk = sample("Disk M/L", dist.TruncatedNormal(pdisk, 0.125, low=0.0))
-    if bulged:
-        smp_pbul = sample("Bulge M/L", dist.TruncatedNormal(pbul, 0.175, low=0.0))        
-    else:
-        smp_pbul = deterministic("Bulge M/L", jnp.array(0.0))
+    smp_pgas  = sample("Gas M/L", dist.TruncatedNormal(1.0, 0.09, low=0.0))
+    if pdisk == 0.5 and pdisk_dex == 0.1: smp_pdisk = sample("Disk M/L", dist.TruncatedNormal(pdisk, 0.125, low=0.0))
+    else: smp_pdisk = sample("Disk M/L", dist.Uniform(pdisk * 10**(-pdisk_dex), pdisk * 10**pdisk_dex))     # For NGC 1560.
+    if bulged: smp_pbul = sample("Bulge M/L", dist.TruncatedNormal(pbul, 0.175, low=0.0))
+    else: smp_pbul = deterministic("Bulge M/L", jnp.array(0.0))
 
     # Sample inclination (convert from degrees to radians!) and scale Vobs accordingly
     inc_min, inc_max = 15 * jnp.pi / 180, 150 * jnp.pi / 180
@@ -179,7 +178,7 @@ def Vobs_fit(table, i_table, data, bulged, profile):
         raise ValueError(f"Unknown profile: '{profile}'.")
     
     # Scatter Vobs with errV.
-    # sample("Vpred scattered", dist.Normal(Vpred, e_Vobs))
+    sample("Vpred scattered", dist.Normal(Vpred, e_Vobs))
     
     ll = jnp.sum(dist.Normal(Vpred, e_Vobs).log_prob(Vobs))
     # We want to keep track of the log likelihood for BIC/AIC calculations.
@@ -198,6 +197,22 @@ def NFW_fit(data):
     logc = sample("logc", transformed_normal(logc_mean, 0.11))
     Vnfw_squared = NFW_velocity_squared(r, 10**logM200c, 10**logc)
     Vpred = deterministic("Vpred", jnp.sqrt(jnp.array(Vnfw_squared + jnp.square(Vbar))))
+    
+    ll = jnp.sum(dist.Normal(Vpred, e_Vobs).log_prob(Vobs))
+    # We want to keep track of the log likelihood for BIC/AIC calculations.
+    deterministic("log_likelihood", ll)
+    factor("ll", ll)
+
+
+def MOND_fit(data):
+    Vobs = deterministic( "Vobs", jnp.array(data["Vobs"]) )
+    e_Vobs = deterministic( "e_Vobs", jnp.array(data["errV"]) )
+    Vbar = deterministic( "Vbar", jnp.array(data["Vbar"]) )
+    r = deterministic("r", jnp.array(data["Rad"]) )
+
+    a0 = sample("a0", dist.TruncatedNormal(1.20, 0.1, low=0.))
+    a0 *= 1.0e-10 / 3.24e-14
+    Vpred = deterministic("Vpred", jnp.sqrt(MOND_vsq(r, jnp.square(Vbar), a0)))
     
     ll = jnp.sum(dist.Normal(Vpred, e_Vobs).log_prob(Vobs))
     # We want to keep track of the log likelihood for BIC/AIC calculations.

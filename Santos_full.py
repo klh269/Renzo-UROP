@@ -16,18 +16,22 @@ from scipy import stats
 
 from utils_analysis.dtw_utils import dtw
 from utils_analysis.mock_gen import Vobs_scat
-from utils_analysis.extract_ft import ft_check
+# from utils_analysis.extract_ft import ft_check
 # from tqdm import tqdm
 
 plt.rcParams.update({'font.size': 14})
 
 
+use_features = True
 testing = False
 make_plots = True
 use_DTW = True
 do_correlations = True
 
-fileloc = "/mnt/users/koe/plots/Santos-Santos/NGC1560_errV/"    # Set to: /SPARC_errV/ or /NGC1560_errV/.
+fileloc = "/mnt/users/koe/plots/Santos-Santos/"
+if use_features: fileloc += "ft_windows/"
+
+fileloc += "NGC1560_errV/"    # Set to: /SPARC_errV/ or /NGC1560_errV/.
 if use_DTW: fname_DTW = fileloc + "dtw/"
 
 num_samples = 1000
@@ -35,7 +39,7 @@ avg_errV = 0.02   # Average error (x Vmax) in Vobs data (SPARC: 0.05, Sanders NG
 
 
 # Main code to run.
-def main(g, r, velocities, errV, num_samples=num_samples):
+def main(g, r_full, velocities, errV, num_samples=num_samples):
     v_data = velocities[:2]
     v_mock = velocities[2:]
 
@@ -53,8 +57,8 @@ def main(g, r, velocities, errV, num_samples=num_samples):
 
     # Compute residuals of fits (v_data = [Vbar, Vobs], v_mock = [MOND, LCDM]).
     res_Vbar, res_Vobs, res_MOND, res_LCDM = [], [] ,[], []
-    for k in range(len(r)):
-        idx = (np.abs(rad - r[k])).argmin()
+    for k in range(len(r_full)):
+        idx = (np.abs(rad - r_full[k])).argmin()
         
         res_Vbar.append(v_data[0,k] - mean_prediction[0][idx])
         res_Vobs.append(v_data[1,k] - mean_prediction[1][idx])
@@ -67,6 +71,18 @@ def main(g, r, velocities, errV, num_samples=num_samples):
     res_data = np.array([ res_Vbar, res_Vobs ])     # dim = (2, len(r), num_samples)
     res_mock = np.array([ res_MOND, res_LCDM ])     # dim = (2, len(r), num_samples)
 
+    if use_features:
+        ft_dict = np.load("/mnt/users/koe/Santos-analysis/ft_properties.npy", allow_pickle=True).item()
+        ft_properties = ft_dict[g]
+        lb, rb = ft_properties[0][0], ft_properties[1][0]
+        res_Vbar = res_Vbar[lb:rb+1]
+        res_Vobs = res_Vobs[lb:rb+1]
+        res_data = res_data[:,lb:rb+1,:]
+        res_mock = res_mock[:,lb:rb+1,:]
+        r = r_full[lb:rb+1]
+    else:
+        r = r_full
+
     # Residual percentiles from uncertainties and scattering; dimensions = (3, 1 or 2, len(r)).
     res_data_median = np.percentile(res_data, 50.0, axis=2)                 # dim = (3, r)
     res_data_percentiles = np.percentile(res_data, [16.0, 84.0], axis=2)    # dim = (2 (perc), 2 (v_comp), r)
@@ -76,26 +92,6 @@ def main(g, r, velocities, errV, num_samples=num_samples):
     # Labels and colours for plots.
     v_comps = [ r"$V_{bar}$", r"$V_{obs}$", r"$V_{MOND}$", r"$V_{\Lambda CDM}$" ]
     colours = [ 'tab:red', 'k', 'mediumblue', 'tab:green' ]
-
-    ft_Vobs, ft_Vbar = 0, 0
-    for smp in range(num_samples):
-    # for smp in tqdm(range(num_samples), desc="Checking for features"):
-        lb, _, _ = ft_check(res_Vbar[5:,smp], errV[5:])
-        # lb, rb, widths = ft_check(res_data[0,5:,smp], res_errors[1,0,5:])
-        if len(lb)>0:
-            ft_Vbar += 1
-            # print(f"Feature found in Vbar!")
-            # print(f"Properties: lb={[x+5 for x in lb]}, rb={[x+5 for x in rb]}, widths={widths}")
-            
-        lb, _, _ = ft_check(res_Vobs[5:,smp], errV[5:])
-        # lb, rb, widths = ft_check(res_data[1,5:,smp], errV[5:])
-        if len(lb)>0:
-            ft_Vobs += 1
-            # print(f"Feature found in Vobs!")
-            # print(f"Properties: lb={[x+5 for x in lb]}, rb={[x+5 for x in rb]}, widths={widths}")
-
-    print(f"Features found in Vbar: {ft_Vbar}")
-    print(f"Features found in Vobs: {ft_Vobs}")
 
 
     """
@@ -226,7 +222,7 @@ def main(g, r, velocities, errV, num_samples=num_samples):
 
             # ax0.scatter(r, v_data[0], c='tab:red', alpha=0.3)   # Vbar
             # ax0.errorbar(r, v_data[1], errV, color='k', alpha=0.3, fmt='o', capsize=2)   # Vobs
-            for j in range(4): ax0.errorbar(r, raw_median[j], raw_errors[:, j], c=colours[j], alpha=0.3, fmt='o', capsize=2) # Vmock
+            for j in range(4): ax0.errorbar(r_full, raw_median[j], raw_errors[:, j], c=colours[j], alpha=0.3, fmt='o', capsize=2) # Vmock
             
             for j in range(4):
                 ax0.plot(rad, mean_prediction[j], color=colours[j], label=v_comps[j])
@@ -276,7 +272,8 @@ def main(g, r, velocities, errV, num_samples=num_samples):
 if __name__ == "__main__":
     dtw_cost, norm_cost = [ [], [], [] ], [ [], [], [] ]
 
-    galaxies = np.load("/mnt/users/koe/gp_fits/Santos-Santos/galaxies.npy")
+    if use_features: galaxies = np.load("/mnt/users/koe/Santos-analysis/ft_galaxies.npy")
+    else: galaxies = np.load("/mnt/users/koe/gp_fits/Santos-Santos/galaxies.npy")
     galaxy_count = len(galaxies)
     columns = [ "Rad", "Vobs", "Vbar" ]
 
@@ -325,11 +322,14 @@ if __name__ == "__main__":
         g_features = [ "g15807_Irr", "g15784_Irr", "g1536_MW", "g5664_MW", "C1", "C5", "C6", "C7", "C8" ]
         g_CLUES = [ "C1", "C2", "C3", "C4", "C5", "C6", "C7", "C8", "C9", "C10" ]
 
+        analysis_dir = "/mnt/users/koe/Santos-analysis/"
+        if use_features: analysis_dir += "ft_windows/"
+
         """
         Plot histogram of normalized DTW costs (in ascending order of costs for data).
         """
         if use_DTW:
-            print("Generating DTW histograms...")
+            print("\nGenerating DTW histograms...")
 
             # dim = (3 x v_comps, galaxy_count, num_samples)
             dtw_cost = np.array(dtw_cost)
@@ -344,9 +344,9 @@ if __name__ == "__main__":
             # norm_percentiles = norm_percentiles[:, :, sort_args]
 
             # Load sorted arrays and indices from Santos-Santos.py (original analysis w/o errors).
-            sort_args = np.load("/mnt/users/koe/Santos-analysis/dtw_args.npy")
+            sort_args = np.load(f"{analysis_dir}dtw_args.npy")
             sort_args = np.flip(sort_args)
-            costs_sorted = np.load("/mnt/users/koe/Santos-analysis/dtw.npy")
+            costs_sorted = np.load(f"{analysis_dir}dtw.npy")
             costs_sorted = np.flip(costs_sorted, axis=1)
 
             norm_percentiles = norm_percentiles[:,:,sort_args]
@@ -454,12 +454,12 @@ if __name__ == "__main__":
         Plot histogram of Pearson coefficients across RC (in ascending order of coefficients for data).
         """
         if do_correlations:
-            print("Generating correlation histograms...")
+            print("\nGenerating correlation histograms...")
 
             """Pearson histogram"""
             # Load sorted arrays and indices from Santos-Santos.py (original analysis w/o errors).
-            sort_args = np.load("/mnt/users/koe/Santos-analysis/pearson_args.npy")
-            pearson_sorted = np.load("/mnt/users/koe/Santos-analysis/pearson.npy")
+            sort_args = np.load(f"{analysis_dir}pearson_args.npy")
+            pearson_sorted = np.load(f"{analysis_dir}pearson.npy")
 
             # Rearrange galaxies into ascending order in median of corr(MOND, Vbar).
             # dim = (# of galaxies, 2 x mock_vcomps, 3 x percentiles)

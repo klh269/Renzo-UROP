@@ -3,11 +3,22 @@
 Function for feature extraction.
 """
 import numpy as np
+from scipy.linalg import cho_factor, cho_solve
+from scipy.spatial.distance import mahalanobis
 
 
-# def find_consecutive(arr, stepsize=1):
-    # """Split array into groups of consecutive elements."""
-    # return np.split(arr, np.where(np.diff(arr) != stepsize)[0]+1)
+def normalize_residuals(data, errors):
+    if errors.ndim == 1:
+        # Uncorrelated noise
+        return data / errors
+    elif errors.ndim == 2:
+        # Correlated noise: errors is the full covariance matrix, apply Cholesky whitening to get uncorrelated errors
+        # (L is the lower triangular matrix from Cholesky decomposition)
+        L, L_T = cho_factor(errors, lower=True)
+        return cho_solve((L, L_T), data)  # Equivalent to L^{-1} * data
+    else:
+        raise ValueError("Errors must be 1D (uncorrelated errors) or 2D (covariance matrix)")
+
 
 def split_signs(arr):
     """
@@ -40,13 +51,12 @@ def split_signs(arr):
 
 
 def ft_check(arr, errV, min_height:float=2.0):
-    arr_normalized = arr / errV
+    arr_normalized = normalize_residuals(arr, errV)
     split_idx = split_signs( arr_normalized )
 
     lb_ft, rb_ft = [], []   # Lists to store left and right boundaries of features.
     for segment in split_idx:
         condition = np.abs(np.array(arr_normalized[segment])) > min_height
-        # if np.count_nonzero(condition) >= 1 and len(segment) >= 3:
         if np.count_nonzero(condition) >= 3:
             lb_ft.append(segment[0])
             rb_ft.append(segment[-1])
@@ -65,68 +75,26 @@ def ft_check(arr, errV, min_height:float=2.0):
             rb_features.append(rb_ft[i])
             i += 1
 
-    return lb_features, rb_features, [rb_features[i] - lb_features[i] for i in range(len(lb_features))]
+    return np.array(lb_features), np.array(rb_features), np.array([rb_features[i] - lb_features[i] for i in range(len(lb_features))])
 
 
-    # lb_peaks, rb_peaks = [], []
-    # for segment in idx_peaks:
-    #     if np.count_nonzero( np.array(arr_normalized[segment]) > min_height ) >= 3: # and len(segment) >= 3:
-    #         lb_peaks.append( segment[0] )
-    #         rb_peaks.append( segment[-1] )
+def get_mahal_dist(arr, cov_inv, lb, rb):
+    arr = arr[lb:rb]
+    zeros = np.zeros_like(arr)
 
-    # lb_troughs, rb_troughs = [], []
-    # for segment in idx_troughs:
-    #     if np.count_nonzero( np.array(arr_normalized[segment]) < - min_height ) >= 3: # and len(segment) >= 3:
-    #         lb_troughs.append( segment[0] )
-    #         rb_troughs.append( segment[-1] )
-            
-    # lb_ft, rb_ft = [], []
-    # if len(lb_ft) >= 1:
-    #     # Check if peaks and troughs can be joined together to form a larger feature (wiggle).
-    #     bases = list(itertools.chain(lb_ft, rb_ft))
-    #     bases.sort()
-    #     ft_bases = []
-    #     i = 0
-    #     while i < len(bases)-1:
-    #         if bases[i+1] - bases[i] != 1:
-    #             ft_bases.append(bases[i])
-    #             i += 1
-    #         else:
-    #             i += 2
-    #     ft_bases.append(bases[-1])
-
-    #     for ftb in ft_bases:
-    #         lb_ft.append(ftb) if ftb in lb_peaks or ftb in lb_troughs else rb_ft.append(ftb)
-
-    # elif len(lb_troughs) >= 1:
-    #     lb_ft = lb_troughs
-    #     rb_ft = rb_troughs
-    # elif len(lb_peaks) >= 1:
-    #     lb_ft = lb_peaks
-    #     rb_ft = rb_peaks
-
-    # lb_features, rb_features, widths = [], [], []
-    # for ib in range(len(lb_ft)):
-    #     if rb_ft[ib] - lb_ft[ib] >= 4:
-    #         lb_features.append(lb_ft[ib])
-    #         rb_features.append(rb_ft[ib])
-    #         widths.append(rb_ft[ib] - lb_ft[ib])
-
-    # return lb_features, rb_features, widths
+    mahal_dist = mahalanobis(zeros, arr, cov_inv[lb:rb, lb:rb])
+    return mahal_dist
 
 
-# def ft_check(arr, errV):
-#     min_width = 2
-#     min_height = 3.0 * errV
-#     peaks, prop1 = find_peaks( arr, height=min_height, width=min_width, rel_height=0.5 )
-#     troughs, prop2 = find_peaks( -arr, height=min_height, width=min_width, rel_height=0.5 )
-#     prop2["peak_heights"]  = - prop2["peak_heights"]
-#     prop2["width_heights"] = - prop2["width_heights"]
+def ft_check_mahanalobis(arr, cov, min_sig:float=6.0):
+    dists, left_bases, right_bases = [], [], []
+    cov_inv = np.linalg.inv(cov)
 
-#     # Merge dictionaries of properties from both peaks and troughs
-#     props = [ prop1, prop2 ]
-#     properties = {}
-#     for key in prop1.keys():
-#         properties[key] = np.concatenate( list(properties[key] for properties in props) )
+    for i in range(1, len(arr)-2):
+        mahal_dist = get_mahal_dist(arr, cov_inv, i-1, i+2)
+        if mahal_dist > min_sig:
+            dists.append(mahal_dist)
+            left_bases.append(i-1)
+            right_bases.append(i+2)
 
-#     return np.concatenate( (peaks, troughs) ), properties
+    return dists, left_bases, right_bases

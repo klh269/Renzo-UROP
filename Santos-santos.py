@@ -26,17 +26,20 @@ import numpyro
 
 from utils_analysis.gp_utils import model, predict, run_inference
 from utils_analysis.dtw_utils import dtw
-from utils_analysis.Vobs_fits import MOND_vsq, NFW_fit, BIC_from_samples
+from utils_analysis.Vobs_fits import MOND_vsq, MOND_fit, NFW_fit, BIC_from_samples
 
 matplotlib.use("Agg")  # noqa: E402
+plt.rcParams.update({'font.size': 13})
 
 
-testing = False
+use_features = False
+testing = True
 make_plots = True
-do_DTW = True
+do_DTW = False
 do_correlations = True
 
 fileloc = "/mnt/users/koe/plots/Santos-Santos/"
+if use_features: fileloc += "ft_windows/"
 
 
 # Main code to run.
@@ -45,7 +48,7 @@ def main(args, ls, g, X, Y, X_test):
     Do inference for Vbar with uniform prior for correlation length,
     then apply the resulted lengthscale to Vobs (both real and mock data).
     """
-    v_comps = [ r"$v_{bar}$", r"$v_{obs}$", r"$v_{MOND}$", r"$V_{\Lambda CDM}$" ]
+    v_comps = [ r"$V_{\text{bar}}$", r"$V_{\text{obs}}$", r"$V_{\text{MOND}}$", r"$V_{\Lambda CDM}$" ]
     colours = [ 'tab:red', 'k', 'mediumblue', 'tab:green' ]
     corner_dir = [ "Vbar/", "Vobs_data/", "Vobs_MOND/", "Vobs_LCDM/" ]
     mean_prediction, percentiles = [], []
@@ -115,6 +118,19 @@ def main(args, ls, g, X, Y, X_test):
         res_LCDM.append(Y[3][k] - mean_prediction[3][idx])
     residuals = np.array([ res_Vbar, res_Vobs, res_MOND, res_LCDM ])
 
+    if use_features:
+        ft_dict = np.load("/mnt/users/koe/Santos-analysis/ft_properties.npy", allow_pickle=True).item()
+        ft_properties = ft_dict[g]
+        lb, rb = ft_properties[0][0], ft_properties[1][0]
+        res_Vbar = res_Vbar[lb:rb+1]
+        res_Vobs = res_Vobs[lb:rb+1]
+        res_MOND = res_MOND[lb:rb+1]
+        res_LCDM = res_LCDM[lb:rb+1]
+        residuals = residuals[:, lb:rb+1]
+        r = X[lb:rb+1]
+    else:
+        r = X
+
 
     """
     DTW on GP residuals.
@@ -142,7 +158,7 @@ def main(args, ls, g, X, Y, X_test):
             x_path, y_path = zip(*path)
             cost = cost_mat[ len(r)-1, len(r)-1 ]
             dtw_cost[j].append(cost)
-            norm_cost[j].append(cost / (2 * len(X)))
+            norm_cost[j].append(cost / (2 * len(r)))
 
             if make_plots:
                 # Plot distance matrix and cost matrix with optimal path.
@@ -212,7 +228,7 @@ def main(args, ls, g, X, Y, X_test):
             # for j in range(10, len(X_test)):
                 # rad_corr[k][0].append(stats.spearmanr(res_fits[k][0][:j], res_fits[k][i][:j])[0])
                 # rad_corr[k][1].append(stats.pearsonr(res_fits[k][0][:j], res_fits[k][i][:j])[0])
-            for j in range(5, len(X)):
+            for j in range(3, len(r)):
                 rad_corr[0].append(stats.spearmanr(residuals[0][:j], residuals[i][:j])[0])
                 rad_corr[1].append(stats.pearsonr(residuals[0][:j], residuals[i][:j])[0])
             correlations_r.append(rad_corr)
@@ -238,56 +254,66 @@ def main(args, ls, g, X, Y, X_test):
             # Plot corrletaions as 1 main plot + 1 subplot, using only Vobs from data for Vbar/Vobs.
             der_axis = [ "Residuals (km/s)", "1st derivative", "2nd derivative" ]
             for der in range(1):
-                fig1, (ax0, ax1, ax2) = plt.subplots(3, 1, sharex=True, gridspec_kw={'height_ratios': [5, 2, 3]})
-                fig1.set_size_inches(7, 7)
-                ax0.set_title("Residuals correlation: "+g)
+                # fig1, (ax0, ax1, ax2) = plt.subplots(3, 1, sharex=True, gridspec_kw={'height_ratios': [5, 2, 3]})
+                # fig1.set_size_inches(7, 7)
+                fig1, (ax0, ax1) = plt.subplots(2, 1, sharex=True, gridspec_kw={'height_ratios': [5, 3]})
+                # ax0.set_title("Residuals correlation: "+g)
                 ax0.set_ylabel("Velocities (km/s)")
 
                 for j in range(4):
                     # Scatter plot for data/mock data points.
-                    ax0.scatter(X, Y[j], color=colours[j], alpha=0.3)
+                    # if j == 0 or j == 1: ax0.scatter(X, Y[j], color=colours[j], marker='o', alpha=0.4)
+                    # else:
+                    ax0.scatter(X, Y[j], color=colours[j], marker='.', alpha=0.4)
                     # Plot mean prediction from GP.
-                    ax0.plot(X_test, mean_prediction[j], color=colours[j], label=v_comps[j])
+                    ax0.plot(X_test, mean_prediction[j], color=colours[j], label=v_comps[j], alpha=0.8)
                     # Fill in 1-sigma (68%) confidence band of GP fit.
                     # ax0.fill_between(X_test, percentiles[j][0, :], percentiles[j][1, :], color=colours[j], alpha=0.2)
-                    ax0.fill_between(X_test, lower_percentile[j], upper_percentile[j], color=colours[j], alpha=0.2)
+                    # ax0.fill_between(X_test, lower_percentile[j], upper_percentile[j], color=colours[j], alpha=0.2)
 
-                ax0.legend(bbox_to_anchor=(1, 1), loc="upper left")
-                ax0.grid()
+                # ax0.legend(bbox_to_anchor=(1, 1), loc="upper left")
+                ax0.legend(fontsize=11)
+                # ax0.grid()
 
                 ax1.set_ylabel(der_axis[der])
+                ax1.axhline(y=0, color='k', linestyle='--', alpha=0.5)
                 for j in range(4):
                     # if der == 0:
                     #     ax1.scatter(r, residuals[j], color=colours[j], alpha=0.3)
                     # ax1.plot(X_test, res_fits[der][j], color=colours[j], label=v_comps[j])
-                    ax1.plot(X, residuals[j], marker='o', color=colours[j], alpha=0.3)
+                    # if j == 0 or j == 1: ax1.scatter(r, residuals[j], marker='o', color=colours[j], alpha=0.4)
+                    # else:
+                    ax1.plot(r, residuals[j], color=colours[j], marker='.', alpha=0.5)
 
-                ax1.grid()
+                # ax1.grid()
 
-                ax2.set_xlabel('Radii (kpc)')
-                ax2.set_ylabel("Correlations")
+                ax1.set_xlabel('Radius (kpc)')
+                # ax2.set_xlabel('Radii (kpc)')
+                # ax2.set_ylabel("Correlations")
                 
-                vel_comps = [ "Data", "MOND", r"$\Lambda$CDM" ]
+                # vel_comps = [ "Data", "MOND", r"$\Lambda$CDM" ]
 
-                for j in range(3):
-                    # Plot correlations and Vbar/Vobs.
-                    # ax2.plot(X_test[10:], correlations_r[j][der][0], color=colours[j+1], label=vel_comps[j]+r": Spearman $\rho$")
-                    # ax2.plot(X_test[10:], correlations_r[j][der][1], ':', color=colours[j+1], label=vel_comps[j]+r": Pearson $\rho$")
-                    ax2.plot(X[5:], correlations_r[j][0], color=colours[j+1], label=vel_comps[j]+r": Spearman $\rho$")
-                    ax2.plot(X[5:], correlations_r[j][1], ':', color=colours[j+1], label=vel_comps[j]+r": Pearson $\rho$")
-                    # ax2.plot([], [], ' ', label=vel_comps[j]+r": $\rho_s=$"+str(round(stats.spearmanr(correlations_r[j][der][0], bar_ratio[10:])[0], 3))+r", $\rho_p=$"+str(round(stats.pearsonr(correlations_r[j][der][1], bar_ratio[10:])[0], 3)))
+                # for j in range(3):
+                #     # Plot correlations and Vbar/Vobs.
+                #     # ax2.plot(X_test[10:], correlations_r[j][der][0], color=colours[j+1], label=vel_comps[j]+r": Spearman $\rho$")
+                #     # ax2.plot(X_test[10:], correlations_r[j][der][1], ':', color=colours[j+1], label=vel_comps[j]+r": Pearson $\rho$")
+                #     ax2.plot(r[3:], correlations_r[j][0], color=colours[j+1], label=vel_comps[j]+r": Spearman $\rho$")
+                #     ax2.plot(r[3:], correlations_r[j][1], ':', color=colours[j+1], label=vel_comps[j]+r": Pearson $\rho$")
+                #     # ax2.plot([], [], ' ', label=vel_comps[j]+r": $\rho_s=$"+str(round(stats.spearmanr(correlations_r[j][der][0], bar_ratio[10:])[0], 3))+r", $\rho_p=$"+str(round(stats.pearsonr(correlations_r[j][der][1], bar_ratio[10:])[0], 3)))
 
-                # ax5 = ax2.twinx()
-                # ax5.set_ylabel(r'Average $v_{bar}/v_{obs}$')
-                # ax5.plot(X_test[10:], bar_ratio[10:], '--', color=color_bar, label="Vbar/Vobs")
-                # ax5.tick_params(axis='y', labelcolor=color_bar)
+                # # ax5 = ax2.twinx()
+                # # ax5.set_ylabel(r'Average $v_{bar}/v_{obs}$')
+                # # ax5.plot(X_test[10:], bar_ratio[10:], '--', color=color_bar, label="Vbar/Vobs")
+                # # ax5.tick_params(axis='y', labelcolor=color_bar)
                 
-                # ax2.legend(bbox_to_anchor=(1.64, 1.3))
-                ax2.legend(bbox_to_anchor=(1, 1))
-                ax2.grid()
+                # # ax2.legend(bbox_to_anchor=(1.64, 1.3))
+                # ax2.legend(bbox_to_anchor=(1, 1))
+                # ax2.grid()
 
                 plt.subplots_adjust(hspace=0.05)
-                fig1.savefig(fileloc+subdir+deriv_dir[der]+g+".png", dpi=300, bbox_inches="tight")
+                # if use_features: fig1.savefig(fileloc+"correlations/"+g+".png", dpi=300, bbox_inches="tight")
+                # else: fig1.savefig(fileloc+subdir+deriv_dir[der]+g+".png", dpi=300, bbox_inches="tight")
+                fig1.savefig(fileloc+g+".pdf", dpi=300, bbox_inches="tight")
                 plt.close()
 
 
@@ -426,16 +452,19 @@ if __name__ == "__main__":
     spearman_data, pearson_data = [], []
     dtw_cost, norm_cost = [ [], [], [] ], [ [], [], [] ]
 
-    galaxies = [ "g1536_Irr", "g1536_MW", "g5664_Irr", "g5664_MW", "g7124_Irr", "g7124_MW", 
-                "g15784_Irr", "g15784_MW", "g15807_Irr", "g21647_Irr", "g21647_MW", "g22437_Irr",
-                "C1", "C2", "C3", "C4", "C5", "C6", "C8", "C9", "C10" ]     # "C7" omitted.
+    if use_features: galaxies = np.load("/mnt/users/koe/Santos-analysis/ft_galaxies.npy")
+    else: galaxies = np.load("/mnt/users/koe/gp_fits/Santos-Santos/galaxies.npy")
+    # galaxies = [ "g1536_Irr", "g1536_MW", "g5664_Irr", "g5664_MW", "g7124_Irr", "g7124_MW", 
+    #             "g15784_Irr", "g15784_MW", "g15807_Irr", "g21647_Irr", "g21647_MW", "g22437_Irr",
+    #             "C1", "C2", "C3", "C4", "C5", "C6", "C8", "C9", "C10" ]     # "C7" omitted.
     galaxy_count = 1 if testing else len(galaxies)
     columns = [ "Rad", "Vobs", "Vbar" ]
 
     ls_dict = np.load("/mnt/users/koe/gp_fits/ls_dict.npy", allow_pickle=True).item()
 
     for i in range(galaxy_count):
-        if testing: g = "g15807_Irr"
+        # if testing: g = "g15807_Irr"
+        if testing: g = "C5"
         else: g = galaxies[i]
 
         print("")
@@ -452,22 +481,32 @@ if __name__ == "__main__":
         data["errV"] = np.full( len(r), 0.01*max(data["Vobs"]) )
 
         # Fit for v_LCDM.
-        nuts_kernel = NUTS(NFW_fit, init_strategy=init_to_median(num_samples=100))
+        nuts_kernel = NUTS(NFW_fit, init_strategy=init_to_median(num_samples=1000))
         mcmc = MCMC(nuts_kernel, num_warmup=10000, num_samples=20000, progress_bar=testing)
         mcmc.run(random.PRNGKey(0), data)
         mcmc.print_summary()
         samples = mcmc.get_samples()
         log_likelihood = samples["log_likelihood"]
         print(f"BIC: {BIC_from_samples(samples, log_likelihood)}")
-        
         v_LCDM = samples["Vpred"][np.argmax(samples["log_likelihood"])]
-        v_MOND = np.sqrt(MOND_vsq(r, Vbar**2))
-        v_components = np.array([ Vbar, data["Vobs"], v_MOND, v_LCDM ])
 
+        # Fit for v_MOND (testing; not used in final analysis).
+        # if testing:
+        #     nuts_kernel = NUTS(MOND_fit, init_strategy=init_to_median(num_samples=1000))
+        #     mcmc = MCMC(nuts_kernel, num_warmup=10000, num_samples=20000, progress_bar=testing)
+        #     mcmc.run(random.PRNGKey(0), data)
+        #     mcmc.print_summary()
+        #     samples = mcmc.get_samples()
+        #     log_likelihood = samples["log_likelihood"]
+        #     print(f"BIC: {BIC_from_samples(samples, log_likelihood)}")
+        #     v_MOND = samples["Vpred"][np.argmax(samples["log_likelihood"])]
+        # else:
+        v_MOND = np.sqrt(MOND_vsq(r, Vbar**2))
+
+        v_components = np.array([ Vbar, data["Vobs"], v_MOND, v_LCDM ])
         np.save(f"/mnt/users/koe/MCMC_fits/Santos-Santos/{g}", np.array([ v_MOND, v_LCDM ]))
         
         rad = np.linspace(min(r), max(r), 100)
-
         X, X_test = r, rad
 
         gp_predictions = [ [], [], [], [] ]
@@ -482,14 +521,18 @@ if __name__ == "__main__":
         # One array per galaxy, each containing 13 lists:
         # radii, mean (x4), 16th percentile (x4), 84th percentile (x4).
         gp_fits = np.array([rad, *gp_predictions, *gp_16percent, *gp_84percent])
-        np.save("/mnt/users/koe/gp_fits/Santos-Santos/"+g, gp_fits)
-        print("GP results successfully saved as /mnt/users/koe/gp_fits/Santos-Santos/"+g+".npy.")
+        gp_dir = "/mnt/users/koe/gp_fits/Santos-Santos/"
+        if use_features: gp_dir += "ft_windows/"
+        np.save(gp_dir+g, gp_fits)
+        print(f"GP results successfully saved as {gp_dir}{g}.npy.")
     
-    if not testing:
+    if not testing and not use_features:
         np.save("/mnt/users/koe/gp_fits/Santos-Santos/galaxies", galaxies)
         print("\nList of analyzed galaxies now saved as /mnt/users/koe/gp_fits/Santos-Santos/galaxies.npy.")
 
     if make_plots and not testing:
+        analysis_dir = "/mnt/users/koe/Santos-analysis/"
+        if use_features: analysis_dir += "ft_windows/"
         if do_DTW:
             """
             Plot histogram of normalized DTW costs (in ascending order of costs for data).
@@ -501,8 +544,8 @@ if __name__ == "__main__":
             for j in range(3):
                 costs_sorted.append(norm_cost[j][sort_args])
 
-            np.save("/mnt/users/koe/Santos-analysis/dtw", costs_sorted)
-            np.save("/mnt/users/koe/Santos-analysis/dtw_args", sort_args)
+            np.save(f"{analysis_dir}dtw", costs_sorted)
+            np.save(f"{analysis_dir}dtw_args", sort_args)
 
             # Plot histogram of normalized DTW alignment costs of all galaxies.
             # plt.title("Normalized DTW alignment costs")
@@ -556,8 +599,8 @@ if __name__ == "__main__":
             for j in range(3):
                 spearman_sorted.append(spearman_data[j][sort_args])
 
-            np.save("/mnt/users/koe/Santos-analysis/spearman", spearman_sorted)
-            np.save("/mnt/users/koe/Santos-analysis/spearman_args", sort_args)
+            np.save(f"{analysis_dir}spearman", spearman_sorted)
+            np.save(f"{analysis_dir}spearman_args", sort_args)
 
             # Plot histogram of Spearman correlations for all galaxies.
             # plt.title("Spearman correlation coefficients")
@@ -571,7 +614,8 @@ if __name__ == "__main__":
             
             plt.legend()
             plt.xticks([])
-            plt.savefig(fileloc+"correlations/radii/d0/spearman_histo1.png", dpi=300, bbox_inches="tight")
+            if use_features: plt.savefig(fileloc+"correlations/spearman_histo1.png", dpi=300, bbox_inches="tight")
+            else: plt.savefig(fileloc+"correlations/radii/d0/spearman_histo1.png", dpi=300, bbox_inches="tight")
             plt.close()
 
             """
@@ -583,8 +627,8 @@ if __name__ == "__main__":
             for j in range(3):
                 pearson_sorted.append(pearson_data[j][sort_args])
 
-            np.save("/mnt/users/koe/Santos-analysis/pearson", pearson_sorted)
-            np.save("/mnt/users/koe/Santos-analysis/pearson_args", sort_args)
+            np.save(f"{analysis_dir}pearson", pearson_sorted)
+            np.save(f"{analysis_dir}pearson_args", sort_args)
 
             # Plot histogram of Pearson correlations for all galaxies.
             # plt.title("pearson correlation coefficients")
@@ -598,7 +642,8 @@ if __name__ == "__main__":
             
             plt.legend()
             plt.xticks([])
-            plt.savefig(fileloc+"correlations/radii/d0/pearson_histo1.pdf", dpi=300, bbox_inches="tight")
+            if use_features: plt.savefig(fileloc+"correlations/pearson_histo1.pdf", dpi=300, bbox_inches="tight")
+            else: plt.savefig(fileloc+"correlations/radii/d0/pearson_histo1.pdf", dpi=300, bbox_inches="tight")
             plt.close()
 
     print("\nMax memory usage: %s (kb)" %getrusage(RUSAGE_SELF).ru_maxrss)

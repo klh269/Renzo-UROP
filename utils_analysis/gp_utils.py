@@ -36,8 +36,8 @@ def model(X, Y, vr=0, ls=0, ns=0, min_length:float=0.5):
         var = vr
 
     if ls == 0:
-        length = numpyro.sample("length", dist.Uniform(max(X) * min_length, max(X)))
-        # length = numpyro.sample("length", dist.Uniform(0.0, max(X)))
+        # length = numpyro.sample("length", dist.Uniform(max(X) * min_length, max(X)))
+        length = numpyro.sample("length", dist.Uniform(0.0, max(X)))
         # length = numpyro.sample("length", dist.Normal(0.5 * max(X), 0.1 * max(X)))
     else:
         length = ls

@@ -3,7 +3,6 @@
 Fit GPs with hand-picked correlation lengthscales on SPARC galaxies.
 This overwrites the saved arrays of GP fits from combined_dtw.py.
 """
-import jax.experimental
 import pandas as pd
 import argparse
 from resource import getrusage, RUSAGE_SELF

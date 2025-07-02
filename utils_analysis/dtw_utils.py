@@ -6,20 +6,28 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 # Dynamic programming code for DTW.
-def dtw(dist_mat):
+def dtw(dist_mat, max_shift:int=5):
     N, M = dist_mat.shape
     
     # Initialize the cost matrix
-    cost_mat = np.zeros((N + 1, M + 1))
+    cost_mat = np.full((N + 1, M + 1), np.inf)
+    cost_mat[0, 0] = 0.0
     for i in range(1, N + 1):
-        cost_mat[i, 0] = np.inf
-    for i in range(1, M + 1):
-        cost_mat[0, i] = np.inf
+        for j in range( max(1, i - max_shift + 1), min(M + 1, i + max_shift + 1) ):
+            cost_mat[i, j] = 0.0
+
+    # cost_mat = np.zeros((N + 1, M + 1))
+    # for i in range(1, N + 1):
+    #     cost_mat[i, 0] = np.inf
+    # for i in range(1, M + 1):
+    #     cost_mat[0, i] = np.inf
 
     # Fill the cost matrix while keeping traceback information
     traceback_mat = np.zeros((N, M))
+
     for i in range(N):
-        for j in range(M):
+        for j in range( max(0, i - max_shift - 1), min(M, i + max_shift + 1) ):
+        # for j in range(M):
             penalty = [
                 cost_mat[i, j],      # match (0)
                 cost_mat[i, j + 1],  # insertion (1)
@@ -51,7 +59,7 @@ def dtw(dist_mat):
     return (path[::-1], cost_mat)
 
 
-def do_DTW(itr:int, length:int, arr1, arr2, window:bool=False, make_plots=False, file_names=""):
+def do_DTW(itr:int, length:int, arr1, arr2, power:float=1.0, max_shift:int=5, window:bool=False, make_plots=False, file_names=""):
     """
     arr1 and arr2 are 2D array-like objects of size (iterations x length);
     arr2 should be residuals from MOND(Vbar) as we defined it to have cost = 0;
@@ -63,17 +71,17 @@ def do_DTW(itr:int, length:int, arr1, arr2, window:bool=False, make_plots=False,
     if window:
         for n in range(length):
             for m in range(length):
-                dist_mat_fwd[n, m] = abs(arr1[itr][44+n] - arr2[itr][44+m])
-                dist_mat_rev[n, m] = abs(arr1[itr][length-44-n] - arr2[itr][length-44-m])
+                dist_mat_fwd[n, m] = abs(arr1[itr][44+n] - arr2[itr][44+m]) ** power
+                dist_mat_rev[n, m] = abs(arr1[itr][length-44-n] - arr2[itr][length-44-m]) ** power
     else:
         for n in range(length):
             for m in range(length):
-                dist_mat_fwd[n, m] = abs(arr1[itr][n] - arr2[itr][m])
-                dist_mat_rev[n, m] = abs(arr1[itr][length-n-1] - arr2[itr][length-m-1])
+                dist_mat_fwd[n, m] = abs(arr1[itr][n] - arr2[itr][m]) ** power
+                dist_mat_rev[n, m] = abs(arr1[itr][length-n-1] - arr2[itr][length-m-1]) ** power
     
     # DTW!
     path_fwd, cost_mat_fwd = dtw(dist_mat_fwd)
-    _, cost_mat_rev = dtw(dist_mat_rev)
+    _, cost_mat_rev = dtw( dist_mat_rev, max_shift )
     cost_fwd = cost_mat_fwd[ length-1, length-1 ]
     cost_rev = cost_mat_rev[ length-1, length-1 ]
 

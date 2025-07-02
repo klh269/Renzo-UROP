@@ -72,7 +72,7 @@ def toy_gen(rad, bump_loc, bump_size, bump_sigma, noise):
     mcmc = MCMC(nuts_kernel, num_warmup=10000, num_samples=20000, progress_bar=False)
     mcmc.run(random.PRNGKey(0), data={"Vobs": vel_MOND, "errV": errV, "Vbar": Vbar, "Rad": rad})
     samples = mcmc.get_samples()
-    vel_LCDM = np.median(samples["Vpred"], axis=0)
+    vel_LCDM = samples["Vpred"][np.argmax(samples["log_likelihood"])]
 
     return Vmax, bump, Vbar, vel_MOND, vel_LCDM
 
@@ -91,7 +91,7 @@ def toy_scatter(num_iterations:int, noise:float, Vmax:float, Vbar, vel_MOND, vel
     Vcdm_copies = np.array( [vel_LCDM] * num_iterations )
     Vcdm = np.random.normal(Vcdm_copies, noise) / Vmax
 
-    return Vbar_werr, Vmond, Vcdm
+    return Vbar_copies / Vmax, Vbar_werr, Vmond, Vcdm
 
 
 def toy_gen_Xft(rad, bump_loc, bump_size, bump_sigma, noise, num_iterations):

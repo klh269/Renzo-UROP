@@ -39,9 +39,9 @@ matplotlib.use("Agg")
 plt.rcParams.update({'font.size': 13})
 
 
-plot_digitizer = True
+plot_digitizer = False
 use_fits = True
-use_window = True   # Use only a window around feature, [15:24] or [35:58], for analysis.
+use_window = False   # Use only a window around feature, [15:24] or [35:58], for analysis.
 
 make_plots = True
 do_DTW = False
@@ -99,8 +99,8 @@ def main(args, r_full, rad, Y, v_data, v_mock, num_samples=num_samples, ls:float
                 )
             )(*vmap_args)
         else:
-            r_Xft = np.delete(r_full, np.s_[37:58], axis=0)
-            Vcomp_Xft = np.delete(Y[j], np.s_[37:58], axis=0)
+            r_Xft = np.delete(r_full, np.s_[35:46], axis=0)
+            Vcomp_Xft = np.delete(Y[j], np.s_[35:46], axis=0)
             means, predictions = vmap(
                 lambda rng_key, var, noise: predict(
                     rng_key, r_Xft, Vcomp_Xft, rad, var, ls, noise, use_cholesky=args.use_cholesky
@@ -152,9 +152,9 @@ def main(args, r_full, rad, Y, v_data, v_mock, num_samples=num_samples, ls:float
             res_mock = res_mock[:,19:24]
             r = r_full[19:24]
         else:
-            res_data = res_data[:,37:58]
-            res_mock = res_mock[:,37:58]
-            r = r_full[37:58]
+            res_data = res_data[:,35:46]
+            res_mock = res_mock[:,35:46]
+            r = r_full[35:46]
     else:
         r = r_full
 
@@ -361,7 +361,7 @@ def main(args, r_full, rad, Y, v_data, v_mock, num_samples=num_samples, ls:float
                         if plot_digitizer:
                             ax1.errorbar(r, res_data[1], Y[6][19:24], color='k', alpha=0.3, fmt='.', capsize=2.5, label=v_comps[j], zorder=10)
                         else:
-                            ax1.errorbar(r, res_data[1], Y[6][37:58], color='k', alpha=0.3, fmt='.', capsize=2.5, label=v_comps[j], zorder=10)
+                            ax1.errorbar(r, res_data[1], Y[6][35:46], color='k', alpha=0.3, fmt='.', capsize=2.5, label=v_comps[j], zorder=10)
                     else: ax1.errorbar(r, res_data[1], Y[6], color='k', alpha=0.3, fmt='.', capsize=2.5, label=v_comps[j])
                     # ax1.plot(r, res_data[1], color='k', label=v_comps[j])
                 else:
@@ -369,7 +369,7 @@ def main(args, r_full, rad, Y, v_data, v_mock, num_samples=num_samples, ls:float
                     # ax1.errorbar(r, res_median[j+1], res_errors[:,j+1], c=c_temp[j], alpha=0.3, fmt='o', capsize=2.5, label=v_comps[j])
             if use_window:  # Vbar.
                 if plot_digitizer: ax1.errorbar(r, res_data[0], Vbar_errors[19:24], color='tab:red', fmt='.', alpha=0.4, capsize=2.5, label=v_comps[0], zorder=11)
-                else: ax1.errorbar(r, res_data[0], Vbar_errors[37:58], color='tab:red', fmt='.', alpha=0.4, capsize=2.5, label=v_comps[0], zorder=11)
+                else: ax1.errorbar(r, res_data[0], Vbar_errors[35:46], color='tab:red', fmt='.', alpha=0.4, capsize=2.5, label=v_comps[0], zorder=11)
             else: ax1.errorbar(r, res_data[0], Vbar_errors, color='tab:red', fmt='.', alpha=0.4, capsize=2.5, label=v_comps[0], zorder=11)
 
             if not use_window: ax1.set_ylim((-8.5, 8.5))
@@ -465,40 +465,51 @@ if __name__ == "__main__":
 
     rad_count = math.ceil((max(r)-min(r))*100)
     rad = np.linspace(min(r), max(r), rad_count)
-    # data["Vdisk"] /= np.sqrt(pdisk)   # Correction now implemented in data
+    if not plot_digitizer: data["Vdisk"] /= np.sqrt(4.6)    # Vdisk in data is presented with M/L ~ 4.6.
 
-    # Normalise velocities by Vmax = max(Vobs) from SPARC data.
-    # Vbar2_unc = Vbar_sq_unc(table, i_table, data, bulged, num_samples)
-    Vbar2 = Vbar_sq(data, bulged)
+    if plot_digitizer:
+        pdisk = 0.4
+        pdisk_dex = 0.1
+    else:
+        pdisk = 1.43
+        pdisk_dex = 0.2
+
+    # Vbar2_unc = Vbar_sq_unc(table, i_table, data, bulged, num_samples, pdisk, pdisk_dex)
+    Vbar2 = Vbar_sq(data, bulged, pdisk=pdisk)
     Vbar = np.sqrt(Vbar2)
 
-    # if make_plots and not use_window:
-    #     # Plot Vobs and Vbar.
-    #     # if plot_digitizer:
-    #     #     plt.title("NGC 1560 (Sanders 2007) from manual digitization")
-    #     # else:
-    #     #     plt.title("NGC 1560 (Gentile et al. 2010) from S. McGaugh")
+    if make_plots and not use_window:
+        # Plot Vobs and Vbar.
+        # if plot_digitizer:
+        #     plt.title("NGC 1560 (Sanders 2007) from manual digitization")
+        # else:
+        #     plt.title("NGC 1560 (Gentile et al. 2010) from S. McGaugh")
             
-    #     plt.xlabel("Radius (kpc)")
-    #     # plt.xlabel(" ")
-    #     if plot_digitizer: plt.ylabel("Velocities (km/s)")
-    #     else: plt.yticks(color='w')
+        plt.xlabel("Radius (kpc)")
+        # plt.xlabel(" ")
+        if plot_digitizer: plt.ylabel("Velocities (km/s)")
+        else: plt.yticks(color='w')
 
-    #     plt.errorbar(r, data["Vobs"], data["errV"], fmt=".", ls='none', capsize=2.5, c='k', label=r"$V_{\text{obs}}$")
-    #     plt.plot(r, np.sqrt(Vbar2), c='k', linestyle='dashdot', label=r"$V_{\text{bar}}$")
-    #     plt.plot(r, data["Vgas"], c='k', linestyle='dotted', label=r"$V_{\text{gas}}$")
-    #     plt.plot(r, np.sqrt(0.5)*data["Vdisk"], c='k', linestyle='dashed', label=r"$V_{\text{disc}}$")
+        plt.errorbar(r, data["Vobs"], data["errV"], fmt=".", ls='none', capsize=2.5, c='k', label=r"$V_{\text{obs}}$")
+        plt.plot(r, np.sqrt(Vbar2), c='k', linestyle='dashdot', label=r"$V_{\text{bar}}$")
+        plt.plot(r, data["Vgas"], c='k', linestyle='dotted', label=r"$V_{\text{gas}}$")
+        plt.plot(r, np.sqrt(pdisk)*data["Vdisk"], c='k', linestyle='dashed', label=r"$V_{\text{disc}}$")
 
-    #     plt.ylim((-6, 83))
-    #     plt.legend()
-    #     plt.savefig(floc+"raw_data.pdf")
-    #     plt.close()
+        # Add text displaying the value of pdisk on top of the Vdisk curve
+        max_vdisk = max(np.sqrt(pdisk) * data["Vdisk"])
+        if plot_digitizer: plt.text(r[len(r)-5], max_vdisk+1, r"$(M/L)_\text{disc}$ = "+f"{pdisk:.2f}", color='k', fontsize=12, ha='center')
+        else: plt.text(r[len(r)-4], max_vdisk-13, r"$(M/L)_\text{disc}$ = "+f"{pdisk:.2f}", color='k', fontsize=12, ha='center')
+
+        plt.ylim((-6, 83))
+        if plot_digitizer: plt.legend()
+        plt.savefig(floc+"raw_data.pdf", bbox_inches="tight", dpi=300)
+        plt.close()
 
     if use_fits:
         print("Fitting for LCDM...")
-        nfw_samples  = Vobs_MCMC(table, i_table, data, bulged, profile="NFW")    # Vobs_MCMC() runs MCMC with Vobs_fit() from Vobs_fits.py
+        nfw_samples  = Vobs_MCMC(table, i_table, data, bulged, profile="NFW", pdisk=pdisk, pdisk_dex=pdisk_dex)    # Vobs_MCMC() runs MCMC with Vobs_fit() from Vobs_fits.py
         print("Fitting for MOND...")
-        mond_samples = Vobs_MCMC(table, i_table, data, bulged, profile="MOND")
+        mond_samples = Vobs_MCMC(table, i_table, data, bulged, profile="MOND", pdisk=pdisk, pdisk_dex=pdisk_dex)
 
         v_LCDM = nfw_samples["Vpred"][np.argmax(nfw_samples["log_likelihood"])]
         v_MOND = mond_samples["Vpred"][np.argmax(mond_samples["log_likelihood"])]

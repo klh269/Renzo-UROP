@@ -24,19 +24,21 @@ from utils_analysis.gp_utils import model, predict, run_inference
 from utils_analysis.dtw_utils import dtw
 from utils_analysis.Vobs_fits import Vbar_sq
 from utils_analysis.mock_gen import Vobs_scat, MOND_unc, Vbar_sq_unc
-from utils_analysis.extract_ft import ft_check
+# from utils_analysis.extract_ft import ft_check
 
 matplotlib.use("Agg")
 plt.rcParams.update({'font.size': 13})
 
 # Directory for saving plots.
 fileloc = "/mnt/users/koe/plots/SPARC_fullGP/"
-make_plots = True
+make_plots = False
+
 num_samples = 1000
 
 
 # Main code to run.
-def main(args, g, r_full, rad, v_data, v_mock, ls:float, num_samples=num_samples, redo_GPR:bool=False, print_progress:bool=False):
+def main(args, g, r_full, rad, v_data, v_mock, ls:float, num_samples=num_samples,
+         redo_GPR:bool=False, print_progress:bool=False, ft_windows:bool=False):
     """
     Do inference for Vbar with uniform prior for correlation length,
     then apply the resulted lengthscale to Vobs (both real and mock data).
@@ -87,9 +89,10 @@ def main(args, g, r_full, rad, v_data, v_mock, ls:float, num_samples=num_samples
         GPR on mock samples.
         -------------------- """
         res_mock = []
+        plotGP_mock = [ [], [], [] ]
         # GPR and analysis on individual mock samples.
         for smp in range(num_samples):
-            if print_progress and smp % 100 == 0: print(f"GPR on mock sample {smp} of {num_samples}...")
+            if print_progress and smp % max( 1, num_samples/10 ) == 0: print(f"GPR on mock sample {smp+1} of {num_samples}...")
             meanGP_mock = []
         
             for j in range(3):
@@ -111,6 +114,9 @@ def main(args, g, r_full, rad, v_data, v_mock, ls:float, num_samples=num_samples
                 mean_pred = np.mean(means, axis=0)
                 meanGP_mock.append(mean_pred)   # [ MOND, LCDM ]
 
+                if smp == 0: plotGP_mock[j] = np.array(mean_pred) / num_samples
+                else: plotGP_mock[j] += np.array(mean_pred) / num_samples
+
                 jax.clear_caches()  # DO NOT DELETE THIS LINE! Reduces memory usage from > 100 GB to < 1 GB!
 
             # Compute residuals of fits.
@@ -125,8 +131,10 @@ def main(args, g, r_full, rad, v_data, v_mock, ls:float, num_samples=num_samples
         res_mock = np.transpose( res_mock, (1, 2, 0) )  # dim = (4, len(r), num_samples)
 
         np.save(f"/mnt/users/koe/mock_residuals/{g}.npy", res_mock)
+        np.save(f"/mnt/users/koe/mock_residuals/plotGP/{g}.npy", plotGP_mock)
+
         if print_progress:
-            print("\nMock residuals saved.")
+            print("\nMock residuals and GP means saved.")
             print("Memory usage: %s (kb)" %getrusage(RUSAGE_SELF).ru_maxrss)
 
     else:
@@ -134,7 +142,8 @@ def main(args, g, r_full, rad, v_data, v_mock, ls:float, num_samples=num_samples
         Load mock samples.
         -------------------- """
         res_mock = np.load( f"/mnt/users/koe/mock_residuals/{g}.npy" )  # dim = (4, len(r), num_samples)
-        if print_progress: print("Mock residuals loaded.")
+        plotGP_mock = np.load( f"/mnt/users/koe/mock_residuals/plotGP/{g}.npy" )    # dim = (4, len(r))
+        if print_progress: print("Mock residuals and GP means loaded.")
         
     res_mock_percentiles = np.percentile(res_mock, [16.0, 50.0, 84.0], axis=2)  # dim = (3, 4, len(r))
 
@@ -142,25 +151,40 @@ def main(args, g, r_full, rad, v_data, v_mock, ls:float, num_samples=num_samples
     """ -------------------------
     Analysis of GP residuals.
     ------------------------- """
+    # Only analyze regions with features in Vobs.
+    if ft_windows:
+        SPARC_features = np.load("/mnt/users/koe/gp_fits/SPARC_features.npy", allow_pickle=True).item()
+        lb, rb, _ = SPARC_features[g]
+        if len(lb) in [1, 2]:
+            slices = [slice(lb[i], rb[i]) for i in range(len(lb))]
+            res_data = np.concatenate([res_data[:, s] for s in slices], axis=1)
+            res_mock = np.concatenate([res_mock[:, s, :] for s in slices], axis=1)
+            r = np.concatenate([r_full[s] for s in slices], axis=0)
+            err_Vobs = np.concatenate([v_data[2][s] for s in slices], axis=0)
+        else:
+            raise ValueError(f"Galaxy {g} has more than 2 features ({len(lb)}) in Vbar!?")
+    
     dtw_cost = [ [], [], [] ]
 
     """ Check for features in Vbar and Vobs. """
-    Vbar_percentiles = np.percentile(res_mock[0], [16.0, 50.0, 84.0], axis=1)
-    Vbar_err = ( Vbar_percentiles[2] - Vbar_percentiles[0] ) / 2.0
+    # if print_progress: print(f"\nChecking for features...")
+    # Vbar_percentiles = np.percentile(res_mock[0], [16.0, 50.0, 84.0], axis=1)
+    # Vbar_err = ( Vbar_percentiles[2] - Vbar_percentiles[0] ) / 2.0
 
-    lb, rb, widths = ft_check(res_data[0], Vbar_err)
-    if print_progress and len(lb) > 0:
-        print(f"\nFeature found in Vbar of {g}")
-        print(f"Properties: lb={lb}, rb={rb}, widths={widths}")
-    Vbar_features = { "lb": lb, "rb": rb, "widths": widths }
+    # lb, rb, widths = ft_check(res_data[0], Vbar_err)
+    # if print_progress and len(lb) > 0:
+    #     print(f"\nFeature found in Vbar of {g}")
+    #     print(f"Properties: lb={lb}, rb={rb}, widths={widths}")
+    # Vbar_features = { "lb": lb, "rb": rb, "widths": widths }
 
-    lb, rb, widths = ft_check(res_data[1], v_data[2])
-    if print_progress and len(lb) > 0:
-        print(f"\nFeature found in Vobs of {g}")
-        print(f"Properties: lb={lb}, rb={rb}, widths={widths}")
-    Vobs_features = { "lb": lb, "rb": rb, "widths": widths }
+    # lb, rb, widths = ft_check(res_data[1], v_data[2])
+    # if print_progress and len(lb) > 0:
+    #     print(f"\nFeature found in Vobs of {g}")
+    #     print(f"Properties: lb={lb}, rb={rb}, widths={widths}")
+    # Vobs_features = { "lb": lb, "rb": rb, "widths": widths }
 
     """ DTW. """
+    if print_progress: print(f"\nComputing DTW...")
     for smp in range(num_samples):
         # Construct distance matrices.
         dist_data = np.zeros((len(r), len(r)))
@@ -229,6 +253,7 @@ def main(args, g, r_full, rad, v_data, v_mock, ls:float, num_samples=num_samples
                 plt.close('all')
 
     """ Pearson correlation coefficients. """
+    if print_progress: print(f"\nComputing Pearson correlation coefficients...")
     pearsonr_data = []
     for j in range(3, len(r)+1):
         pearsonr_data.append(stats.pearsonr(res_data[0,:j], res_data[1,:j])[0])
@@ -240,7 +265,8 @@ def main(args, g, r_full, rad, v_data, v_mock, ls:float, num_samples=num_samples
         for i in range(1, 3):
             pearsonr_mock = []
             for j in range(3, len(r)+1):
-                pearsonr_mock.append(stats.pearsonr(res_Vbar_data[:j], res_mock[i,:j,smp])[0])
+                # pearsonr_mock.append(stats.pearsonr(res_mock[i-1,:j,smp], res_mock[i+1,:j,smp])[0])
+                pearsonr_mock.append(stats.pearsonr(res_data[0,:j], res_mock[i+1,:j,smp])[0])
             correlations_r.append(pearsonr_mock)
         radii_corr.append(correlations_r)
         
@@ -249,9 +275,6 @@ def main(args, g, r_full, rad, v_data, v_mock, ls:float, num_samples=num_samples
 
     """ Plot GP fits, residuals and correlations. """
     if make_plots:
-        c_temp = [ 'tab:red', 'mediumblue', 'tab:green' ]
-        labels_temp = [ r"$V_\text{bar}$", r"$V_\text{MOND}$", r"$V_{\Lambda CDM}$", r"$V_\text{obs}$" ]
-
         """Pearson correlations."""
         fig1, (ax0, ax1, ax2) = plt.subplots(3, 1, sharex=True, gridspec_kw={'height_ratios': [5, 2, 3]})
         fig1.set_size_inches(7, 7)
@@ -259,10 +282,13 @@ def main(args, g, r_full, rad, v_data, v_mock, ls:float, num_samples=num_samples
         ax0.set_ylabel("Velocities (km/s)")
         
         for j in range(4):
-            if j == 3:
-                ax0.errorbar(r, v_data[1], v_data[2], color='k', alpha=0.3, fmt='o', capsize=2, label=labels_temp[j])
-            else:
-                ax0.scatter(r, raw_median[j], c=c_temp[j], alpha=0.3, label=labels_temp[j])
+            if j < 2:
+                if j == 0: ax0.scatter(r, v_data[0], color='tab:red', alpha=0.3)    # Vbar
+                else: ax0.errorbar(r, v_data[1], v_data[2], color='k', alpha=0.3, fmt='o', capsize=2)   # Vobs
+                ax0.plot(rad, meanGP_data[j], color=colours[j], label=v_comps[j], zorder=10-j)
+            else: 
+                ax0.scatter(r, raw_median[j-1], c=colours[j], alpha=0.3)
+                ax0.plot(rad, plotGP_mock[j-1], color=colours[j], label=v_comps[j], zorder=10-j)
 
         ax0.legend(bbox_to_anchor=(1, 1), loc="upper left")
         ax0.grid()
@@ -270,13 +296,14 @@ def main(args, g, r_full, rad, v_data, v_mock, ls:float, num_samples=num_samples
         ax1.set_ylabel("Residuals (km/s)")
         for j in range(4):
             # Plots for mock Vobs + Vbar (sampled w/ uncertainties).
-            if j == 3:
+            if j < 2:
                 ax1.errorbar(r[2:], res_data[1,2:], v_data[2,2:], color='k', alpha=0.3, ls='none', fmt='o', capsize=2)
-                ax1.plot(r[2:], res_data[1,2:], color='k')
+                ax1.scatter(r[2:], res_data[0,2:], c='tab:red', alpha=0.3)
+                ax1.plot(r[2:], res_data[j,2:], c=colours[j])
             else:
-                ax1.scatter(r[2:], res_mock_percentiles[1,j+1,2:], c=c_temp[j], alpha=0.3)
-                ax1.plot(r[2:], res_mock_percentiles[1,j+1,2:], c=c_temp[j])
-                ax1.fill_between(r[2:], res_mock_percentiles[0,j+1,2:], res_mock_percentiles[2,j+1,2:], color=c_temp[j], alpha=0.15)
+                ax1.scatter(r[2:], res_mock_percentiles[1,j,2:], c=colours[j], alpha=0.3)
+                ax1.plot(r[2:], res_mock_percentiles[1,j,2:], c=colours[j])
+                ax1.fill_between(r[2:], res_mock_percentiles[0,j,2:], res_mock_percentiles[2,j,2:], color=colours[j], alpha=0.15)
 
         ax1.grid()
 
@@ -299,9 +326,11 @@ def main(args, g, r_full, rad, v_data, v_mock, ls:float, num_samples=num_samples
     
     # pearson_mock = np.percentile(radii_corr, [16.0, 50.0, 84.0], axis=0).T
 
-    g_dict = { "Vbar_features" : Vbar_features, "Vobs_features" : Vobs_features,
-               "pearson_data" : pearson_data, "pearson_mock" : pearson_mock, "dtw_cost" : dtw_cost }
-    np.save(f"/mnt/users/koe/SPARC_fullGP/{g}.npy", g_dict)
+    g_dict = { "pearson_data" : pearson_data, "pearson_mock" : pearson_mock, "dtw_cost" : dtw_cost }
+    if ft_windows:
+        g_dict["sig2noise"] = np.max( np.abs(res_data[1]) / err_Vobs )
+        np.save(f"/mnt/users/koe/SPARC_fullGP/ft_windows/{g}.npy", g_dict)
+    else: np.save(f"/mnt/users/koe/SPARC_fullGP/{g}.npy", g_dict)
 
     if print_progress: print("\nMemory usage: %s (kb)" %getrusage(RUSAGE_SELF).ru_maxrss)
     jax.clear_caches()    # One-line attempt to solve the JIT memory allocation problem.
@@ -327,6 +356,8 @@ def get_args():
     parser.add_argument("--testing", default=False, type=bool)
     parser.add_argument("--galaxy", default="", type=str)
     parser.add_argument("--redo-GPR", default=False, type=bool)
+    parser.add_argument("--ft-windows", default=False, type=bool,
+                        help="Analyze only regions with features in Vobs.")
     args = parser.parse_args()
 
     numpyro.set_platform(args.device)
@@ -368,8 +399,15 @@ if __name__ == "__main__":
 
     columns = [ "Rad", "Vobs", "errV", "Vgas",
                 "Vdisk", "Vbul", "SBdisk", "SBbul" ]
+    
+    # Analyze only features instead.
+    ft_windows = args.ft_windows
+    if ft_windows:
+        SPARC_features = np.load("/mnt/users/koe/gp_fits/SPARC_features.npy", allow_pickle=True).item()
+        galaxies = list(SPARC_features.keys())
+    else:
+        galaxies = np.load("/mnt/users/koe/gp_fits/galaxy.npy")
 
-    galaxies = np.load("/mnt/users/koe/gp_fits/galaxy.npy")
     if args.galaxy != "":
         galaxy_count = 1
         print_progress = True
@@ -402,9 +440,8 @@ if __name__ == "__main__":
         ls_dict = np.load("/mnt/users/koe/gp_fits/ls_dict.npy", allow_pickle=True).item()
         ls = ls_dict[g]
 
-        SPARC_features = np.load("/mnt/users/koe/gp_fits/SPARC_features.npy", allow_pickle=True).item()
-
-        print(f"Analyzing {g} ({i}/{galaxy_count})...")
-        main( args, g, r, rad, v_data, v_mock, ls, num_samples=num_samples, redo_GPR=args.redo_GPR, print_progress=print_progress )
+        print(f"Analyzing {g} ({i+1}/{galaxy_count})...")
+        main( args, g, r, rad, v_data, v_mock, ls, num_samples=num_samples,
+             redo_GPR=args.redo_GPR, print_progress=print_progress, ft_windows=ft_windows )
 
     print("Max memory usage: %s (kb)" %getrusage(RUSAGE_SELF).ru_maxrss)
