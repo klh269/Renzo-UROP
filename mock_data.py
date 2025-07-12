@@ -99,19 +99,23 @@ use_GP    = True    # Note: A median filter is used if use_GP = False.
 apply_DTW = True
 corr_rad  = True
 
-window_lb = 4.0
-window_rb = 6.0
-
+# Parse command line arguments.
 args = set_args( use_GP )
-    
-# Parameters for Gaussian bump (fixed feature) and noise (varying amplitudes).
-bump_size = -4.0    # Bump size similar to that in Sanders' NGC 1560.
-bump_loc  = 5.0
-
 testing = args.testing
 use_window = args.window
 bump_sigma = args.ft_width
 scat_Vbar = args.scat_Vbar
+
+if bump_sigma >= 0.3:
+    window_lb = 4.0
+    window_rb = 6.0
+else:
+    window_lb = 4.5
+    window_rb = 5.5
+
+# Parameters for Gaussian bump (fixed feature) and noise (varying amplitudes).
+bump_size = -4.0    # Bump size similar to that in Sanders' NGC 1560.
+bump_loc  = 5.0
 
 if testing: height_arr = np.linspace(5.0, 2.0, 7, endpoint=True)
 else: height_arr = np.linspace(20.0, 2.0, 37, endpoint=True)
