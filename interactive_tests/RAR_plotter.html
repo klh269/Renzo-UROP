@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>RAR + Delta Slider</title>
+  <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+  <style>
+    #slider-container { margin: 20px 0; }
+  </style>
+</head>
+<body>
+  <div>
+    <label for="galaxy-select">Select Galaxy:</label>
+    <select id="galaxy-select"></select>
+  </div>
+  <div id="slider-container">
+    <label for="delta-slider">Δ value:</label>
+    <input type="range" id="delta-slider" min="0" max="1" step="0.1" value="0">
+    <span id="delta-value">0.0</span>
+  </div>
+  <div id="plot"></div>
+
+  <script>
+    // ---- Load your figure JSON exported from Python ----
+    const figureData = "/mnt/users/koe/plots/RAR_figure.json";
+    
+    Plotly.newPlot('plot', figureData.data, figureData.layout);
+
+    // ---- Identify traces ----
+    const deltaTraces = [];
+    const galaxyTraces = {};
+    figureData.data.forEach((tr, idx) => {
+      const cd = tr.customdata || [];
+      if(cd.length && cd[0].family === 'delta') deltaTraces.push(idx);
+      if(cd.length && cd[0].galaxy) {
+        const gal = cd[0].galaxy;
+        if(!galaxyTraces[gal]) galaxyTraces[gal] = [];
+        galaxyTraces[gal].push(idx);
+      }
+    });
+
+    // ---- Populate dropdown ----
+    const galaxySelect = document.getElementById('galaxy-select');
+    Object.keys(galaxyTraces).forEach(gal => {
+      const opt = document.createElement('option');
+      opt.value = gal; opt.text = gal;
+      galaxySelect.add(opt);
+    });
+
+    // ---- Galaxy selection handler ----
+    galaxySelect.addEventListener('change', () => {
+      const selected = galaxySelect.value;
+      Object.keys(galaxyTraces).forEach(gal => {
+        const visible = (gal === selected);
+        const update = { visible: visible };
+        Plotly.restyle('plot', update, galaxyTraces[gal]);
+      });
+    });
+
+    // ---- Delta slider handler ----
+    const deltaSlider = document.getElementById('delta-slider');
+    const deltaValue = document.getElementById('delta-value');
+
+    deltaSlider.addEventListener('input', () => {
+      const delta = parseFloat(deltaSlider.value).toFixed(1);
+      deltaValue.textContent = delta;
+      
+      // Update delta-family visibility
+      deltaTraces.forEach(idx => {
+        const cd = figureData.data[idx].customdata;
+        const traceDelta = cd.length ? cd[0].delta : null;
+        const visible = (traceDelta == delta);
+        Plotly.restyle('plot', { visible: visible }, [idx]);
+      });
+    });
+  </script>
+</body>
+</html>
