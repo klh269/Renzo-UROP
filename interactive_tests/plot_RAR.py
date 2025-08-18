@@ -71,8 +71,14 @@ def delta_family(delta:float, g_bar):
     return ( 1 - np.exp( -( g_bar / a_0 )**( delta / 2.0 ) ) )**( -1.0 / delta ) * g_bar
 
 def gamma_family(gamma:float, g_bar):
+    # Note: alpha = gamma / 2 for the third IF family in https://ui.adsabs.harvard.edu/abs/2008ApJ...678..131M/abstract 
     y = g_bar / a_0
     return ( ( 1 - np.exp( -y**( gamma / 2.0 ) ) )**( -1.0 / gamma ) + ( 1 - 1.0 / gamma ) * np.exp( -y**( gamma / 2.0 ) ) ) * g_bar
+
+def alpha_family(alpha:float, g_bar):
+    # Second IF family in https://ui.adsabs.harvard.edu/abs/2008ApJ...678..131M/abstract 
+    y = g_bar / a_0
+    return ( ( 1 - np.exp(-y) )**(-0.5) + alpha * np.exp(-y) ) * g_bar
 
 # --- Specific Interpolating Functions (IFs) ---
 def rar_if(g_bar):
@@ -177,13 +183,25 @@ def plot_per_galaxy():
             legendgroup="rc",
             showlegend=True
         ), row=1, col=2)
+
         # Simple IF for Vobs
         fig.add_trace(go.Scatter(
             x=vals['r'],
-            y=np.sqrt(MOND_vsq(vals['r'], vals['Vbar'])),
+            y=np.sqrt(MOND_vsq(vals['r'], vals['Vbar']**2)),
             mode='lines',
             line=dict(color='red', width=2),
             name=f"{gal} Simple IF",
+            visible=(gal == galaxies[0]),
+            legendgroup="rc",
+            showlegend=False
+        ), row=1, col=2)
+        # Standard IF for Vobs
+        fig.add_trace(go.Scatter(
+            x=vals['r'],
+            y=np.sqrt(standard_if(vals['g_bar']) * vals['r'] * 3.086e19) / 1e3,  # Convert to km/s
+            mode='lines',
+            line=dict(color='green', width=2),
+            name=f"{gal} Standard IF",
             visible=(gal == galaxies[0]),
             legendgroup="rc",
             showlegend=False
@@ -208,6 +226,7 @@ def plot_per_galaxy():
             legendgroup="acc",
             showlegend=False
         ), row=2, col=2)
+
         # Simple IF for g_obs
         fig.add_trace(go.Scatter(
             x=vals['r'],
@@ -219,10 +238,21 @@ def plot_per_galaxy():
             legendgroup="acc",
             showlegend=False
         ), row=2, col=2)
+        # Standard IF for g_obs
+        fig.add_trace(go.Scatter(
+            x=vals['r'],
+            y=standard_if(vals['g_bar']),
+            mode='lines',
+            line=dict(color='green', width=2),
+            name=f"{gal} Standard IF",
+            visible=(gal == galaxies[0]),
+            legendgroup="acc",
+            showlegend=False
+        ), row=2, col=2)
 
     # --- Build interactive dropdown button ---
     n_fixed_traces   = 5    # 5 fixed traces: background + y=x + 3 special IFs
-    n_traces_per_gal = 7    # 5 traces per galaxy: RAR + 2 x RC + 2 x Acc curves
+    n_traces_per_gal = 9    # 9 traces per galaxy: RAR + 4 x RC + 4 x Acc curves
     buttons = []
     vis_fixed = [True] * n_fixed_traces
 
@@ -258,8 +288,8 @@ def plot_per_galaxy():
 
 # --- Plot RAR families with interactive slider ---
 def plot_RAR_families(family:str="delta"):
-    if family not in ("n", "delta", "gamma"):
-        raise ValueError(f"Invalid family '{family}'. Must be one of: 'n', 'delta', 'gamma'.")
+    if family not in ("n", "delta", "gamma", "alpha"):
+        raise ValueError(f"Invalid family '{family}'. Must be one of: 'n', 'delta', 'gamma' or 'alpha'.")
 
     fig = create_subplots()
 
@@ -368,6 +398,9 @@ def plot_RAR_families(family:str="delta"):
     elif family == "gamma":
         get_IF_family = gamma_family
         symbol = "γ"
+    elif family == "alpha":
+        get_IF_family = alpha_family
+        symbol = "α"
 
     for j, p_val in enumerate(param_values):
         # --- Subplot (1,1): RAR ---
@@ -455,9 +488,10 @@ def plot_RAR_families(family:str="delta"):
 
 if __name__ == "__main__":
     plot_per_galaxy()
-    plot_RAR_families("n")
-    plot_RAR_families("delta")
-    plot_RAR_families("gamma")
+    # plot_RAR_families("n")
+    # plot_RAR_families("delta")
+    # plot_RAR_families("gamma")
+    plot_RAR_families("alpha")
 
 # TO DO:
 #   Add IFs to RC and Acc plots. Maybe add some sort of residuals too?
